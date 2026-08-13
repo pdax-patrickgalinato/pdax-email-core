@@ -5,7 +5,7 @@ acts on** the result: quarantine, confirm-block, release, and **re-evaluate**.
 
 ## Where mail goes
 
-Root: `gateway/spool/` (override with `--spool` or `PDAX_QUARANTINE_ROOT`)
+Root: `gateway/spool/` (override with `--spool` or `SEG_QUARANTINE_ROOT`)
 
 ```
 gateway/spool/
@@ -27,7 +27,7 @@ gateway/spool/
 Each entry keeps **`message.eml`**, so you can re-run the pipeline later without
 needing the live mail server.
 
-## Enforce modes (`PDAX_ENFORCE`)
+## Enforce modes (`SEG_ENFORCE`)
 
 | Mode | Behavior |
 |------|----------|
@@ -62,8 +62,8 @@ verdict/disposition) so you have an audit trail of FP decisions.
 ## Ingest held mail
 
 ```bash
-PDAX_ENFORCE=quarantine python3 gateway/hold_consumer.py path/to/held.eml
-PDAX_ENFORCE=quarantine python3 gateway/hold_consumer.py gateway/spool/hold/
+SEG_ENFORCE=quarantine python3 gateway/hold_consumer.py path/to/held.eml
+SEG_ENFORCE=quarantine python3 gateway/hold_consumer.py gateway/spool/hold/
 ```
 
 ## Disposition map (`rules/disposition.yaml`)

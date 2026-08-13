@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>PDAX Secure Email Gateway Service (SEGS) — Gateway Console</title>
+<title>Secure Email Gateway Service (SEGS) — Gateway Console</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext y='20' font-size='20'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E" />
 <style>
@@ -201,7 +201,7 @@
     position: sticky; top: 0; z-index: 5;
   }
   .topbar-title { display: flex; flex-direction: column; gap: 2px; }
-  .topbar-title h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  .topbar-title h1 { font-size: 23px; font-weight: 700; letter-spacing: -0.02em; }
   .topbar-title p { font-size: 12.5px; color: var(--ink-muted); }
   .topbar-right { display: flex; align-items: center; gap: 14px; }
 
@@ -257,7 +257,15 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
     padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 8px;
     border-left: 3px solid var(--tile-accent, var(--border));
+    font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%;
+    transition: box-shadow 0.15s ease, transform 0.1s ease;
   }
+  .stat-tile:hover { box-shadow: var(--shadow); }
+  .stat-tile:active { transform: translateY(1px); }
+  /* Outset + offset so this never touches/doubles the tile's own border-left
+     accent bar above (an inset ring in the same per-tile color collided with
+     it) — same outline convention as :focus-visible elsewhere in this file. */
+  .stat-tile.active { outline: 2px solid var(--tile-accent, var(--accent)); outline-offset: 2px; }
   .stat-tile .stat-label {
     display: flex; align-items: center; gap: 7px;
     font-size: 12px; color: var(--ink-secondary); font-weight: 600;
@@ -271,7 +279,7 @@
   /* ============================== THREAT MIX BAR ============================== */
   .mix-bar {
     display: flex; width: 100%; height: 12px; border-radius: 999px; overflow: hidden;
-    background: var(--border); margin: 2px 0 4px;
+    background: var(--border); margin: 2px 0 4px; gap: 2px;
   }
   .mix-seg { height: 100%; transition: width 0.4s ease; min-width: 0; }
   .mix-seg.v-clean { background: var(--status-good); }
@@ -288,15 +296,59 @@
   .lg-swatch.v-suspicious { background: var(--status-serious); }
   .lg-swatch.v-malicious { background: var(--status-critical); }
 
+  /* ============================== POLICY PANEL ============================== */
+  .policy-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px; margin-top: 4px;
+  }
+  .policy-tile {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface-2, transparent);
+  }
+  .policy-tile .pt-dot {
+    width: 10px; height: 10px; border-radius: 999px; flex: none;
+    background: var(--status-good);
+  }
+  .policy-tile.pt-off .pt-dot { background: var(--ink-muted); }
+  .policy-tile .pt-label { font-size: 13px; font-weight: 620; color: var(--ink); }
+  .policy-tile .pt-state { font-size: 11px; color: var(--ink-muted); margin-left: auto; text-transform: uppercase; letter-spacing: 0.04em; }
+  .policy-tile.pt-off { opacity: 0.85; }
+  .pt-switch {
+    margin-left: auto; position: relative; width: 34px; height: 20px; flex: none;
+    border-radius: 999px; border: none; padding: 0; background: var(--ink-muted);
+    cursor: pointer; transition: background 0.15s ease;
+  }
+  .pt-switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 999px; background: #fff; transition: transform 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .pt-switch[aria-checked="true"] { background: var(--status-good); }
+  .pt-switch[aria-checked="true"]::after { transform: translateX(14px); }
+  .pt-switch:disabled { cursor: not-allowed; opacity: 0.5; }
+  .pt-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ============================== CATEGORY CHIPS ============================== */
+  .cat-chip-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .cat-chip {
+    font-size: 10.5px; font-weight: 620; padding: 2px 8px; border-radius: 999px;
+    background: var(--accent-wash, var(--border)); color: var(--ink-secondary);
+    white-space: nowrap;
+  }
+
   /* ============================== CHART CARD ============================== */
   .card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
     padding: 18px 20px;
   }
+  /* Marks the page's primary, actionable content (e.g. the live feed table)
+     apart from supporting analytics cards around it — same data, clearer weight. */
+  .card-primary { background: var(--surface-raised); border-color: var(--border-strong); box-shadow: var(--shadow); }
   .card-head {
-    display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; gap: 12px;
+    display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; gap: 12px;
   }
-  .card-head h2 { font-size: 14.5px; font-weight: 650; }
+  .card-head h2 { font-size: 15.5px; font-weight: 680; letter-spacing: -0.01em; }
   .card-head .card-sub { font-size: 12px; color: var(--ink-muted); }
   .chart-legend { display: flex; align-items: center; gap: 14px; }
   .chart-legend .cl-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-muted); }
@@ -367,9 +419,16 @@
   .data-table td { padding: 9px 12px; border-bottom: 1px solid var(--gridline); vertical-align: middle; }
   .data-table tbody tr:hover { background: var(--border); }
   .data-table .cell-time { color: var(--ink-muted); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
-  .data-table .cell-from { display: flex; flex-direction: column; gap: 1px; max-width: 220px; }
+  .data-table .cell-from { max-width: 220px; }
   .data-table .cell-from .addr { font-family: var(--font-mono); font-size: 12px; color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .data-table .cell-subject { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .data-table .cell-subject { max-width: 320px; }
+  /* min-height on a <td> itself is ignored by table layout in every engine
+     that matters here — reserving consistent row height (whether or not a
+     category chip renders, whether From is one line or two) has to happen
+     on a normal block element nested inside the cell instead. */
+  .data-table .cell-content-min { min-height: 44px; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+  .data-table .cell-content-min .cat-chip-row { margin-top: 3px; }   /* cat-chip-row's own 4px margin + the 1px flex gap above would double up otherwise */
+  .data-table .cell-subject-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .data-table .cell-score { font-family: var(--font-mono); font-weight: 650; }
   .row-enter { animation: rowEnter 0.5s ease both; }
   @keyframes rowEnter { from { background: var(--accent-wash); opacity: 0; transform: translateY(-4px);} to { background: transparent; opacity: 1; transform: translateY(0);} }
@@ -440,7 +499,7 @@
   /* ============================== MODAL / TOAST ============================== */
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(11,11,11,0.45); display: none;
-    align-items: center; justify-content: center; z-index: 30; padding: 20px;
+    align-items: center; justify-content: center; z-index: 500; padding: 20px;
   }
   .modal-overlay.show { display: flex; }
   .modal {
@@ -456,7 +515,7 @@
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
   .toast-stack {
-    position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 40;
+    position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 501;
   }
   .toast {
     background: var(--surface-raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow);
@@ -466,22 +525,49 @@
   @keyframes toastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   .toast svg { width: 15px; height: 15px; flex: none; color: var(--status-good); }
 
-  /* Detail drawer */
-  .drawer-overlay {
-    position: fixed; inset: 0; background: rgba(11,11,11,0.35); display: none; z-index: 25;
+  /* Floating preview window — replaces the old side drawer (Phase 14). A
+     desktop-window-style component per the user's explicit request, not a
+     modal: draggable by its title bar, resizable from its corner, and
+     background interaction stays possible (aria-modal deliberately absent). */
+  .float-win-layer { position: fixed; inset: 0; pointer-events: none; z-index: 26; }
+  .float-win {
+    position: absolute; display: flex; flex-direction: column;
+    background: var(--surface-raised); border: 1px solid var(--border-strong);
+    border-radius: 12px; box-shadow: var(--shadow); overflow: hidden;
+    pointer-events: auto; min-width: 380px; min-height: 260px;
+    animation: fwIn 0.14s ease both;
   }
-  .drawer-overlay.show { display: block; }
-  .drawer {
-    position: fixed; top: 0; right: 0; height: 100%; width: min(420px, 92vw);
-    background: var(--surface-raised); border-left: 1px solid var(--border);
-    box-shadow: var(--shadow); z-index: 26; transform: translateX(100%); transition: transform 0.22s ease;
-    display: flex; flex-direction: column;
+  @keyframes fwIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .float-win { animation: none; } }
+  .float-win.focused {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), var(--shadow);
   }
-  @media (prefers-reduced-motion: reduce) { .drawer { transition: none; } }
-  .drawer.show { transform: translateX(0); }
-  .drawer-head { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-  .drawer-close { border: none; background: var(--border); border-radius: 8px; width: 28px; height: 28px; display: grid; place-items: center; cursor: pointer; color: var(--ink-secondary); flex: none; }
-  .drawer-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  .float-win.maximized { border-radius: 0; }
+  .float-win.minimized {
+    width: 320px !important; height: auto !important; min-width: 0 !important; min-height: 0 !important;
+  }
+  .float-win.minimized .fw-body, .float-win.minimized .fw-foot, .float-win.minimized .fw-resize { display: none; }
+  .fw-head {
+    padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface);
+    display: flex; align-items: center; gap: 8px; cursor: grab; flex: none; user-select: none;
+  }
+  .fw-head:active { cursor: grabbing; }
+  .fw-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fw-controls { display: flex; gap: 5px; flex: none; }
+  .fw-btn {
+    border: none; background: var(--border); border-radius: 6px; width: 24px; height: 24px;
+    display: grid; place-items: center; cursor: pointer; color: var(--ink-secondary); flex: none;
+  }
+  .fw-btn:hover { background: var(--border-strong); }
+  .fw-btn svg { width: 12px; height: 12px; }
+  .fw-btn.fw-close:hover { background: var(--status-critical-bg); color: var(--status-critical); }
+  .fw-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  .fw-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; flex: none; }
+  .fw-resize {
+    position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 0 40%, var(--border-strong) 40% 48%, transparent 48% 62%, var(--border-strong) 62% 70%, transparent 70% 100%);
+  }
   .drawer-field { display: flex; flex-direction: column; gap: 3px; }
   .drawer-field .df-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); font-weight: 650; }
   .drawer-field .df-value { font-size: 13px; }
@@ -489,13 +575,8 @@
   .reason-list { display: flex; flex-direction: column; gap: 6px; }
   .reason-list li { font-size: 12.5px; color: var(--ink-secondary); padding-left: 14px; position: relative; }
   .reason-list li::before { content: "–"; position: absolute; left: 0; color: var(--ink-muted); }
-  .drawer-foot { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
   .retention-note {
     font-size: 11.5px; color: var(--ink-muted); background: var(--border); border-radius: 8px; padding: 8px 10px;
-  }
-  .drawer-section-title {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); font-weight: 650;
-    margin-bottom: 8px;
   }
   .override-banner {
     font-size: 12.5px; padding: 9px 11px; border-radius: 8px;
@@ -539,9 +620,33 @@
     margin-top: 2px; font-weight: 600;
   }
   .ioc-empty { font-size: 11.5px; color: var(--ink-muted); font-style: italic; }
+  body.auth-pending .shell { visibility: hidden; }
 </style>
 </head>
-<body>
+<body class="auth-pending">
+<script>
+// Auth gate — runs before the rest of the page's script. UI-only
+// defense-in-depth (the real enforcement is server-side require_role on
+// every API call); this just avoids flashing dashboard content and sends
+// an unauthenticated visitor to the login page. See server/deps.py.
+(function () {
+  "use strict";
+  // Exposed so the main script (loaded after this one) can await the
+  // resolved user before rendering role-gated UI (e.g. the policy toggle
+  // switches) instead of racing an unresolved fetch.
+  window.__SEG_AUTH_READY__ = fetch("/api/auth/me", { credentials: "same-origin" }).then(function (r) {
+    if (!r.ok) throw new Error("unauthenticated");
+    return r.json();
+  }).then(function (user) {
+    window.__SEG_CURRENT_USER__ = user;
+    document.body.classList.remove("auth-pending");
+    return user;
+  }).catch(function (err) {
+    window.location.href = "/login.html";
+    throw err;   // keep the promise rejected — main script's .catch() no-ops on redirect
+  });
+})();
+</script>
 
 <div class="shell">
   <!-- ============================== RAIL ============================== -->
@@ -553,7 +658,7 @@
         </svg>
       </div>
       <div>
-        <div class="brand-name">PDAX Secure Email Gateway Service (SEGS)</div>
+        <div class="brand-name" id="brandName">Secure Email Gateway Service (SEGS)</div>
         <div class="brand-sub">Gateway console</div>
       </div>
     </div>
@@ -570,11 +675,6 @@
       <button class="nav-item" data-page="audit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l2 4H7l2-4z"/><path d="M5 7h14l-1 13a2 2 0 01-2 2H8a2 2 0 01-2-2L5 7z"/><path d="M10 11v6M14 11v6" /></svg>
         Audit log
-      </button>
-      <button class="nav-item" data-page="samples">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13l2 2 4-4"/></svg>
-        Analyzed samples
-        <span class="nav-count" id="navSamplesCount" style="background:var(--accent);">0</span>
       </button>
     </div>
     <div class="rail-footer">
@@ -609,14 +709,19 @@
     </div>
 
     <div class="content">
-      <div class="proto-banner">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L14.7 3.86a2 2 0 00-3.4 0z"/></svg>
-        <span><strong>Prototype — sample data.</strong> This console is a design preview: every email below is synthetic. It shows how the console will behave once pdax-email-core is running as the live inline gateway.</span>
-      </div>
-
       <!-- ============================== PAGE: OVERVIEW ============================== -->
       <section class="page active" id="page-overview">
         <div class="stat-grid" id="statGrid"></div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Protection policy</h2>
+              <div class="card-sub">Category toggles mirroring the Email Security Module's General policy — sourced from rules/policy.yaml</div>
+            </div>
+          </div>
+          <div class="policy-grid" id="policyGrid"></div>
+        </div>
 
         <div class="card">
           <div class="card-head">
@@ -648,12 +753,13 @@
           </div>
         </div>
 
-        <div class="card" style="padding:0;">
+        <div class="card card-primary" style="padding:0;">
           <div class="card-head" style="padding:18px 20px 0;">
             <div>
               <h2>Live feed</h2>
               <div class="card-sub">Every message as the gateway scores it, newest first</div>
             </div>
+            <div id="feedFilterBadge"></div>
           </div>
           <div class="feed-scroll">
             <table class="data-table">
@@ -684,7 +790,7 @@
         <div class="toolbar">
           <input class="search-input" id="qSearch" type="search" placeholder="Search by sender, domain, or subject…" />
         </div>
-        <div class="card" style="padding:0;">
+        <div class="card card-primary" style="padding:0;">
           <div class="table-scroll">
             <table class="data-table">
               <thead>
@@ -714,65 +820,16 @@
             Wazuh alerts only
           </button>
         </div>
-        <div class="card" style="padding: 6px 20px;">
+        <div class="card card-primary" style="padding: 6px 20px;">
           <div class="log-list" id="auditList"></div>
         </div>
       </section>
-
-      <!-- ============================== PAGE: ANALYZED SAMPLES ============================== -->
-      <section class="page" id="page-samples">
-        <div class="proto-banner" style="background:var(--accent-wash);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 8v4M12 16h.01"/></svg>
-          <span><strong>Real analysis — not synthetic.</strong> These are the <span id="samplesCountInline">0</span> reports produced by <span class="mono">eml_analysis_agent.py</span> over <span class="mono">samples/</span>, rated on the agent's own <strong>LOW / MEDIUM / HIGH / CRITICAL</strong> scale (distinct from the gateway verdicts on the other pages).</span>
-        </div>
-        <div class="tabs" id="sTabs">
-          <button class="tab active" data-stab="all">All <span class="tab-count" id="scAll">0</span></button>
-          <button class="tab" data-stab="critical">Critical <span class="tab-count" id="scCritical">0</span></button>
-          <button class="tab" data-stab="high">High <span class="tab-count" id="scHigh">0</span></button>
-          <button class="tab" data-stab="medium">Medium <span class="tab-count" id="scMedium">0</span></button>
-          <button class="tab" data-stab="low">Low <span class="tab-count" id="scLow">0</span></button>
-        </div>
-        <div class="toolbar">
-          <input class="search-input" id="sSearch" type="search" placeholder="Search by sender, subject, category, or indicator…" />
-        </div>
-        <div class="card" style="padding:0;">
-          <div class="table-scroll">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th style="width:74px;">Risk</th>
-                  <th style="width:54px;">Score</th>
-                  <th>From</th>
-                  <th>Subject</th>
-                  <th style="width:150px;">Category</th>
-                  <th>Top indicators</th>
-                </tr>
-              </thead>
-              <tbody id="samplesBody"></tbody>
-            </table>
-          </div>
-          <div class="empty-state" id="samplesEmpty" style="display:none;">No matching reports.</div>
-        </div>
-      </section>
     </div>
   </div>
 </div>
 
-<!-- ============================== DETAIL DRAWER ============================== -->
-<div class="drawer-overlay" id="drawerOverlay"></div>
-<div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerSubject">
-  <div class="drawer-head">
-    <div>
-      <div class="df-label" style="margin-bottom:4px;">Message detail</div>
-      <h3 id="drawerSubject" style="font-size:15px;"></h3>
-    </div>
-    <button class="drawer-close" id="drawerClose" aria-label="Close">
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-    </button>
-  </div>
-  <div class="drawer-body" id="drawerBody"></div>
-  <div class="drawer-foot" id="drawerFoot"></div>
-</div>
+<!-- ============================== FLOATING PREVIEW WINDOWS ============================== -->
+<div class="float-win-layer" id="floatWinLayer"></div>
 
 <!-- ============================== CONFIRM MODAL ============================== -->
 <div class="modal-overlay" id="modalOverlay">
@@ -789,7 +846,7 @@
 
 <div class="toast-stack" id="toastStack"></div>
 
-<script src="samples_data.js"></script>
+<script src="flag_descriptions_data.js"></script>
 <script>
 (function () {
   "use strict";
@@ -803,7 +860,11 @@
     wazuh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 11-14h-7l1-6z"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4"/><path d="M4 19h16"/></svg>',
     release: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
-    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    minimize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+    maximize: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>',
+    restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="12" height="12" rx="1.5"/><path d="M5 15V6a1 1 0 011-1h9"/></svg>'
   };
 
   /* ============================== VERDICT MODEL ============================== */
@@ -814,13 +875,8 @@
     SUSPICIOUS: { key: "suspicious", label: "Suspicious",  cls: "v-suspicious", icon: "serious",  action: "Quarantined" },
     MALICIOUS:  { key: "malicious",  label: "Malicious",   cls: "v-malicious",  icon: "critical", action: "Blocked" }
   };
-  var VERDICT_WEIGHTS = [["CLEAN", 58], ["LOW", 17], ["SUSPICIOUS", 16], ["MALICIOUS", 9]];
   var STAGE_ORDER = ["headers", "sender", "urls", "attachments", "content_ai", "intel"];
-  var STAGE_LABEL = { headers: "headers", sender: "sender", urls: "urls", attachments: "attachments", content_ai: "content_ai", intel: "intel" };
-
-  // ---- Exact port of rules/weights.yaml ----
-  var STAGE_WEIGHTS = { headers: 20, sender: 15, urls: 20, attachments: 15, content_ai: 10, intel: 20 };
-  var THRESHOLDS = { malicious: 70, suspicious: 45, low: 20 };
+  var THRESHOLDS = { malicious: 70, suspicious: 45, low: 20 };   // used by verdictMargin() — real scoring now happens server-side
 
   // ---- Exact port of app/report.py's _FLAG_DESCRIPTIONS / _FLAG_PREFIX_DESCRIPTIONS ----
   var FLAG_DESC = {
@@ -854,9 +910,9 @@
     unusual_request: "An AI reviewer flagged this as an unusual or out-of-context request.",
     prompt_injection_attempt: "The email body tried to instruct the AI reviewer directly (e.g. “ignore previous instructions”) — the attempt itself was treated as a red flag, not followed.",
     threat_intel_hit: "One of this email's domains/URLs/hashes matched a known-bad indicator in threat intelligence.",
-    url_lookalike_domain: "A link's domain is a near-identical lookalike of one of PDAX's protected domains.",
+    url_lookalike_domain: "A link's domain is a near-identical lookalike of one of the organization's protected domains.",
     banned_attachment_type: "This email has an attachment of a file type that's outright banned (executables, scripts, etc.).",
-    sender_lookalike_domain: "The sender's own domain is a near-identical lookalike of one of PDAX's protected domains.",
+    sender_lookalike_domain: "The sender's own domain is a near-identical lookalike of one of the organization's protected domains.",
     bec_vip_impersonation: "The display name impersonates a protected VIP/executive name AND the message body matches a BEC financial-request pattern — a high-confidence combination."
   };
   var FLAG_PREFIX_DESC = {
@@ -873,11 +929,25 @@
     intel_hash: "Attachment hash '{value}' matched a known-bad threat-intelligence indicator.",
     ai: "AI reviewer identified a pattern not in the standard checklist: {value}"
   };
+  // dashboard/build_flag_descriptions.py exports the real app/report.py
+  // dicts — prefer those so this dashboard never drifts out of sync with
+  // the pipeline's own flag catalogue again. FLAG_DESC/FLAG_PREFIX_DESC
+  // above stay as a fallback for the rare case the data file failed to load.
+  var EXPORTED_FLAG_DESC = (window.SEG_FLAG_DESCRIPTIONS && window.SEG_FLAG_DESCRIPTIONS.exact) || {};
+  var EXPORTED_FLAG_PREFIX_DESC = (window.SEG_FLAG_DESCRIPTIONS && window.SEG_FLAG_DESCRIPTIONS.prefix) || {};
   function describeFlag(flag) {
+    if (flag.indexOf("policy_suppressed:") === 0) {
+      var underlying = flag.slice("policy_suppressed:".length);
+      var cat = categoryForFlag(underlying);
+      var label = (cat && CATEGORY_LABEL[cat]) || "A disabled policy category";
+      return label + " is disabled — this would have flagged: " + describeFlag(underlying);
+    }
+    if (EXPORTED_FLAG_DESC[flag]) return EXPORTED_FLAG_DESC[flag];
     if (FLAG_DESC[flag]) return FLAG_DESC[flag];
     var idx = flag.indexOf(":");
     if (idx !== -1) {
       var prefix = flag.slice(0, idx), value = flag.slice(idx + 1);
+      if (EXPORTED_FLAG_PREFIX_DESC[prefix]) return EXPORTED_FLAG_PREFIX_DESC[prefix].replace("{value}", value);
       if (FLAG_PREFIX_DESC[prefix]) return FLAG_PREFIX_DESC[prefix].replace("{value}", value);
     }
     var s = flag.replace(/_/g, " ").replace(":", ": ");
@@ -885,25 +955,86 @@
   }
   function uniq(arr) { return arr.filter(function (v, i) { return arr.indexOf(v) === i; }).sort(); }
 
-  // ---- Exact port of verdict.py's max-plus blend ----
-  function computeComposite(stages) {
-    var contributions = [];
-    STAGE_ORDER.forEach(function (name) {
-      var st = stages[name];
-      if (!st) return;
-      contributions.push((st.score / 100) * (STAGE_WEIGHTS[name] / 20) * 100);
+  /* ============================== TMES POLICY CATEGORIES ============================== */
+  // Phase 11: live from GET/PUT /api/policy (server/routers/policy.py),
+  // not the static build-time export dashboard/build_policy_data.py used to
+  // produce — real rules/policy.yaml state, refreshed after every toggle.
+  // categoryFlagMatch (app/pipeline/policy.py's CATEGORY_FLAG_MATCH) rarely
+  // changes, so it's still fetched once and cached in POLICY, not re-sent
+  // on every GET — this section ports only the *matching function*
+  // (category_for_flag/_matches_prefix), not a second hand-written copy of
+  // the category assignments themselves.
+  var POLICY = { categories: [], categoryFlagMatch: {}, allCategories: [] };
+  var CATEGORY_LABEL = {};
+  function applyPolicyResponse(data) {
+    POLICY.categories = data.categories || [];
+    if (data.categoryFlagMatch) POLICY.categoryFlagMatch = data.categoryFlagMatch;
+    if (data.allCategories) POLICY.allCategories = data.allCategories;
+    CATEGORY_LABEL = {};
+    POLICY.categories.forEach(function (c) { CATEGORY_LABEL[c.key] = c.label; });
+  }
+  function loadPolicy() {
+    return fetch("/api/policy", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(applyPolicyResponse);
+  }
+  // Phase 13 white-labeling: brand name comes from GET /api/org
+  // (rules/org.yaml) instead of being hardcoded — deploying this for a
+  // different organization is a config edit, not a code change.
+  function loadOrg() {
+    return fetch("/api/org", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (org) {
+        var el = document.getElementById("brandName");
+        if (el && org.display_name) el.textContent = org.display_name + " Secure Email Gateway Service (SEGS)";
+      })
+      .catch(function () { /* keep the static default */ });
+  }
+  function setPolicyCategory(category, enabled) {
+    return fetch("/api/policy", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category: category, enabled: enabled })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("policy update failed (" + r.status + ")");
+      return r.json();
+    }).then(applyPolicyResponse);
+  }
+
+  function matchesPrefix(flag, prefix) {
+    return flag === prefix || flag.indexOf(prefix + ":") === 0 || flag.indexOf(prefix + "_") === 0;
+  }
+  function categoryForFlag(flag) {
+    for (var cat in POLICY.categoryFlagMatch) {
+      var m = POLICY.categoryFlagMatch[cat];
+      if (m.exact.indexOf(flag) !== -1) return cat;
+      for (var i = 0; i < m.prefix.length; i++) {
+        if (matchesPrefix(flag, m.prefix[i])) return cat;
+      }
+    }
+    return null;
+  }
+  function categoriesForFlags(flags) {
+    var seen = {}, out = [];
+    (flags || []).forEach(function (f) {
+      var cat = categoryForFlag(f);
+      if (cat && !seen[cat]) { seen[cat] = true; out.push(cat); }
     });
-    contributions.sort(function (a, b) { return b - a; });
-    var dominant = contributions[0] || 0;
-    var rest = contributions.slice(1).reduce(function (s, c) { return s + c; }, 0) * 0.5;
-    return Math.round(Math.min(dominant + rest, 100) * 10) / 10;
+    return out;
   }
-  function verdictFromScore(score) {
-    if (score >= THRESHOLDS.malicious) return "MALICIOUS";
-    if (score >= THRESHOLDS.suspicious) return "SUSPICIOUS";
-    if (score >= THRESHOLDS.low) return "LOW";
-    return "CLEAN";
+  // Renders which of the 6 TMES policy categories fired on a row, echoing
+  // the Email Security Module screenshot's per-category framing directly in
+  // the feed/quarantine tables (e.g. a malicious row shows "Malware Scanning
+  // · File Blocking" chips for the categories that actually caught it).
+  function categoryChipsHtml(reasons) {
+    var cats = categoriesForFlags(reasons);
+    if (!cats.length) return "";
+    return '<div class="cat-chip-row">' + cats.map(function (c) {
+      return '<span class="cat-chip">' + escapeHtml(CATEGORY_LABEL[c] || c) + "</span>";
+    }).join("") + "</div>";
   }
+
   // ---- Exact port of report.py's _verdict_margin ----
   function verdictMargin(verdict, score, hasOverride) {
     if (hasOverride) return "";
@@ -914,261 +1045,46 @@
     return (t.low - score).toFixed(1) + " points below the LOW threshold of " + t.low;
   }
 
-  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-  function st(status, score, flags, extra) {
-    var o = { status: status, score: score, flags: flags || [] };
-    if (extra) for (var k in extra) o[k] = extra[k];
-    return o;
-  }
-
-  /* ---- Scenario templates: each a full 6-stage breakdown, not just a flat
-     score. Several reproduce real cases run through the actual pipeline this
-     session (Claire Morgan copyright-lure SUSPICIOUS 53.5, the ShareFile/
-     OAuth BEC case MALICIOUS 100, the gift-card BEC hard-override 90) so the
-     dashboard's "findings" read exactly like the CLI report, not an
-     approximation of it. ---- */
-  var TEMPLATES = {
-    CLEAN: [
-      { fromName: "GitHub", fromAddr: "notifications@github.com", subject: "Your pull request was merged",
-        stages: { headers: st("ok", 0), sender: st("degraded", 0), urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 0, [], { summary: "" }), intel: st("ok", 0) },
-        ips: ["140.82.113.25"] },
-      { fromName: "Circle", fromAddr: "receipts@circle.com", subject: "Your receipt from Circle",
-        stages: { headers: st("ok", 0), sender: st("degraded", 0), urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 20, ["payment_lure_subject"], { summary: "Routine transactional receipt language, no pressure or credential requests." }), intel: st("ok", 0) },
-        ips: ["34.120.8.41"] },
-      { fromName: "Marketing", fromAddr: "news@notify.figma.com", subject: "New features in your workspace this month",
-        stages: { headers: st("ok", 0), sender: st("degraded", 0), urls: st("ok", 5, ["url_embedded_redirect"]), attachments: st("skipped", 0),
-          content_ai: st("ok", 0), intel: st("ok", 0) },
-        extraDomains: ["click.notify.figma.com"], urls: ["https://click.notify.figma.com/track?u=1"] }
-    ],
-    LOW: [
-      { fromName: "Vendor Billing", fromAddr: "billing@mailer.hubspot.com", subject: "Your invoice #8831 is ready",
-        stages: { headers: st("ok", 0), sender: st("degraded", 40, ["display_name_email_mismatch"]), urls: st("ok", 8, ["url_deep_subdomain"]), attachments: st("skipped", 0),
-          content_ai: st("ok", 0), intel: st("ok", 0) },
-        extraDomains: ["link.mailer.hubspot.com"], urls: ["https://link.mailer.hubspot.com/a/b/c/d/invoice"] },
-      { fromName: "IT Helpdesk", fromAddr: "it-support@atlassian.net", subject: "Re: your ticket has been updated",
-        stages: { headers: st("ok", 15, ["return_path_mismatch"]), sender: st("degraded", 0), urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 20, ["urgency_language"], { summary: "Mild urgency phrasing but consistent with a routine support update." }), intel: st("ok", 0) },
-        ips: ["104.192.141.1"] }
-    ],
-    SUSPICIOUS: [
-      // Real case, run through Gemini this session — reproduced exactly (53.5).
-      { fromName: "Claire Morgan", fromAddr: "george.kidunda25@mustudent.ac.tz", subject: "Notice regarding the unauthorized use of Claire Morgan's video/image content – Please see attached details.",
-        stages: {
-          headers: st("ok", 25, ["spf_softfail"]),
-          sender: st("degraded", 0),
-          urls: st("ok", 0),
-          attachments: st("skipped", 0),
-          content_ai: st("ok", 82, ["urgency_language", "generic_greeting", "ai:copyright_takedown_lure", "unusual_request"],
-            { summary: "High risk copyright infringement notice lure threatening ad takedown and legal reporting to force the recipient to click external links or review attached files." }),
-          intel: st("ok", 0)
-        },
-        extraDomains: ["mx.google.com"], ips: ["18.208.22.100", "209.85.210.193"], urls: ["https://tr.ee/ClaireMorganCF"] },
-      { fromName: "\"IT Helpdesk\"", fromAddr: "admin@billing-update-portal.net", subject: "Action required: verify your account",
-        stages: {
-          headers: st("ok", 0), sender: st("degraded", 0),
-          urls: st("ok", 50, ["url_ip_literal", "url_brand_keyword_offbrand", "url_risky_tld:top", "url_deep_subdomain"]),
-          attachments: st("skipped", 0),
-          content_ai: st("ok", 25, ["credential_request"], { summary: "Requests account verification via an unfamiliar link cluster; login-harvest shape." }),
-          intel: st("ok", 0)
-        },
-        ips: ["185.220.101.47"], urls: ["https://secure-login.account-verify.top/portal/a/b/verify"] },
-      { fromName: "Finance Team", fromAddr: "finance@5first.com", subject: "Please review & eSign: Subscription Agreement",
-        stages: {
-          headers: st("ok", 0),
-          sender: st("degraded", 40, ["vip_name_spoof:PDAX"]),
-          urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 70, ["urgency_language", "credential_request", "generic_greeting", "payment_lure_subject"],
-            { summary: "Urgent document-signing lure combined with a generic greeting and a financial pretext." }),
-          intel: st("ok", 0)
-        },
-        ips: ["157.7.104.36"] }
-    ],
-    MALICIOUS: [
-      // Real case from this session's wooga.eml root-cause fix — reproduced exactly (100.0).
-      { fromName: "\"Kenneth Chua\" Via ShareFile Notifications (No Reply)", fromAddr: "wooga@5first.com", subject: "Please Review & eSign : Subscription Agreement.docx",
-        stages: {
-          headers: st("ok", 0),
-          sender: st("degraded", 40, ["brand_impersonation_display_name:sharefile"]),
-          urls: st("ok", 100, ["url_brand_keyword_offbrand", "url_oauth_state_email_exposure"]),
-          attachments: st("skipped", 0),
-          content_ai: st("ok", 40, ["urgency_language", "content_padding_evasion"],
-            { summary: "eSign lure combined with a whitespace-padding evasion pattern hiding an injected legitimate-looking thread." }),
-          intel: st("ok", 0)
-        },
-        extraDomains: ["login.microsoftonline.com"], ips: ["98.159.234.151", "157.7.104.36"],
-        urls: ["https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=employee@pdax.ph&scope=openid&prompt=none&client_id=8f774a17"],
-        authRelay: ["info@transfer.lolipop.jp"] },
-      { fromName: "PDAX Security", fromAddr: "no-reply@auth-microsft0nline.com", subject: "URGENT: Your PDAX account access will be suspended",
-        stages: {
-          headers: st("ok", 65, ["spf_fail", "dkim_fail", "return_path_mismatch"]),
-          sender: st("degraded", 0),
-          urls: st("ok", 20, ["url_ip_literal"]),
-          attachments: st("skipped", 0),
-          content_ai: st("ok", 45, ["credential_request", "urgency_language"], { summary: "Account-suspension threat driving toward a credential-harvest link on a raw IP host." }),
-          intel: st("ok", 0)
-        },
-        ips: ["45.135.132.7"] }
-    ],
-    MALICIOUS_OVERRIDE: [
-      { fromName: "PDAX CEO", fromAddr: "ceo.office@gmail.com", subject: "Are you available? Quick task",
-        hardOverride: "bec_vip_impersonation", score: 90,
-        stages: {
-          headers: st("ok", 0), sender: st("degraded", 40, ["vip_name_spoof:PDAX"]), urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 30, ["bec_pattern"], { summary: "Gift-card/wire-transfer pretext co-occurring with executive-name impersonation." }), intel: st("ok", 0)
-        },
-        overrideReasons: ["vip_name_spoof:PDAX", "bec_pattern"], ips: ["209.85.220.41"] },
-      { fromName: "PDAX Notifications", fromAddr: "auth@pdax-secure-login.top", subject: "Two-factor authentication required",
-        hardOverride: "sender_lookalike_domain", score: 95,
-        stages: {
-          headers: st("ok", 0), sender: st("degraded", 60, ["lookalike_of:pdax.ph"]), urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 25, ["credential_request"]), intel: st("ok", 0)
-        },
-        overrideReasons: ["lookalike_of:pdax.ph"], ips: ["193.29.13.20"] },
-      { fromName: "Vendor Invoice", fromAddr: "billing@vendor-payouts.com", subject: "Invoice_Q3_Statement.exe attached",
-        hardOverride: "banned_attachment_type", score: 95,
-        stages: {
-          headers: st("ok", 0), sender: st("degraded", 0), urls: st("skipped", 0),
-          attachments: st("ok", 60, ["banned_attachment:exe"], { hashes: ["9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"] }),
-          content_ai: st("ok", 20, ["urgency_language"]), intel: st("ok", 0)
-        },
-        overrideReasons: ["banned_attachment:exe"], hashes: ["9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"] },
-      { fromName: "Wallet Verification", fromAddr: "support@wallet-verify-pdax.xyz", subject: "Complete wallet verification to avoid suspension",
-        hardOverride: "threat_intel_hit", score: 100,
-        stages: {
-          headers: st("ok", 0), sender: st("degraded", 0), urls: st("skipped", 0), attachments: st("skipped", 0),
-          content_ai: st("ok", 30, ["credential_request", "urgency_language"]),
-          intel: st("ok", 90, ["intel_domain:wallet-verify-pdax.xyz"])
-        },
-        overrideReasons: ["intel_domain:wallet-verify-pdax.xyz"], ips: ["23.227.38.74"] }
-    ]
-  };
-
-  function overrideDesc(name) {
-    var d = {
-      threat_intel_hit: FLAG_DESC.threat_intel_hit,
-      url_lookalike_domain: FLAG_DESC.url_lookalike_domain,
-      banned_attachment_type: FLAG_DESC.banned_attachment_type,
-      sender_lookalike_domain: FLAG_DESC.sender_lookalike_domain,
-      bec_vip_impersonation: FLAG_DESC.bec_vip_impersonation
-    };
-    return d[name] || name;
-  }
-
-  function deriveIOCs(fromAddr, fromDomain, tpl, allFlags) {
-    var domains = uniq([fromDomain].concat(tpl.extraDomains || []));
-    var context = {};
-    allFlags.forEach(function (f) {
-      var idx = f.indexOf(":");
-      if (idx === -1) return;
-      var prefix = f.slice(0, idx), value = f.slice(idx + 1);
-      if (prefix === "lookalike_of" || prefix === "brand_impersonation_display_name" || prefix === "vip_name_spoof") {
-        context[fromDomain] = describeFlag(f);
-      } else if (prefix === "intel_domain") {
-        if (domains.indexOf(value) === -1) domains.push(value);
-        context[value] = "MATCHED KNOWN-BAD THREAT INTEL";
-      } else if ((prefix === "url_lookalike" || prefix === "intel_url") && (tpl.urls || []).length) {
-        context[tpl.urls[0]] = describeFlag(f);
-      }
-    });
-    if (allFlags.indexOf("url_oauth_state_email_exposure") !== -1 && (tpl.urls || []).length) {
-      context[tpl.urls[tpl.urls.length - 1]] = describeFlag("url_oauth_state_email_exposure");
-    }
-    if (allFlags.indexOf("banned_attachment:exe") !== -1 && (tpl.hashes || []).length) {
-      context[tpl.hashes[0]] = "Banned high-risk attachment type";
-    }
-    return {
-      sender_emails: [fromAddr],
-      domains: uniq(domains),
-      ips: uniq(tpl.ips || []),
-      urls: uniq(tpl.urls || []),
-      hashes_sha256: uniq(tpl.hashes || []),
-      authenticated_relay_senders: uniq(tpl.authRelay || []),
-      context: context
-    };
-  }
-
-  var idCounter = 1;
-  function makeEmail(timestamp) {
-    var tierRoll = weightedTier();
-    var pool = TEMPLATES[tierRoll === "MALICIOUS" && Math.random() < 0.5 ? "MALICIOUS_OVERRIDE" : tierRoll];
-    var tpl = pick(pool);
-    var allFlags = uniq(STAGE_ORDER.reduce(function (acc, name) { return acc.concat(tpl.stages[name].flags || []); }, []));
-    var hasOverride = !!tpl.hardOverride;
-    var score = hasOverride ? tpl.score : computeComposite(tpl.stages);
-    var verdict = hasOverride ? "MALICIOUS" : verdictFromScore(score);
-    var reasons = hasOverride ? tpl.overrideReasons.slice() : allFlags;
-    var iocs = deriveIOCs(tpl.fromAddr, tpl.fromAddr.split("@")[1], tpl, allFlags);
-    var id = "MSG-" + (100000 + idCounter++);
-    return {
-      id: id, ts: timestamp, verdict: verdict, score: score, hardOverride: tpl.hardOverride || null,
-      fromName: tpl.fromName, fromAddr: tpl.fromAddr, subject: tpl.subject,
-      stages: tpl.stages, reasons: reasons, iocs: iocs,
-      status: (verdict === "SUSPICIOUS" || verdict === "MALICIOUS") ? "held" : "delivered", // held | released
-      expiresAt: timestamp + 7 * 24 * 3600 * 1000
-    };
-  }
-  function weightedTier() {
-    var total = VERDICT_WEIGHTS.reduce(function (s, w) { return s + w[1]; }, 0);
-    var r = Math.random() * total;
-    for (var i = 0; i < VERDICT_WEIGHTS.length; i++) {
-      r -= VERDICT_WEIGHTS[i][1];
-      if (r <= 0) return VERDICT_WEIGHTS[i][0];
-    }
-    return "CLEAN";
-  }
-
   /* ============================== STATE ============================== */
   var state = {
-    feed: [],          // newest first, all verdicts
+    feed: [],          // newest first, all verdicts — loaded from GET /api/feed
     activePage: "overview",
     qFilter: "all",
+    overviewFilter: "all",   // Phase 14: set by clicking a stat tile — "all" | "safe" | "suspicious" | "malicious"
     qSearch: "",
-    sFilter: "all",
-    sSearch: "",
     auditSearch: "",
     auditWazuhOnly: false,
-    audit: []
+    audit: []           // loaded from GET /api/audit (shadow_enforcement.jsonl)
   };
 
-  function addAudit(type, title, detail, wazuh) {
-    state.audit.unshift({ ts: Date.now(), type: type, title: title, detail: detail, wazuh: !!wazuh });
-    if (state.audit.length > 400) state.audit.length = 400;
+  /* ============================== REAL DATA LOADING ============================== */
+  // Phase 12: replaces the old synthetic TEMPLATES/makeEmail()/seed() feed
+  // generator entirely. state.feed comes from GET /api/feed
+  // (server/feed_builder.py — run_pipeline() over samples/*.eml plus
+  // gateway/spool/ records); state.audit comes from GET /api/audit
+  // (gateway/spool/shadow_logs/shadow_enforcement.jsonl).
+  function shadowLogToAuditEntry(e) {
+    var tsMs = e.ts ? new Date(e.ts).getTime() : Date.now();
+    if (isNaN(tsMs)) tsMs = Date.now();
+    var verdict = e.verdict || "CLEAN";
+    var type = verdict === "MALICIOUS" ? "critical" : verdict === "SUSPICIOUS" ? "serious"
+             : verdict === "LOW" ? "warning" : "good";
+    var title = "Shadow decision: " + (e.disposition_intended || e.action_taken || verdict);
+    var detail = (e.from || "unknown sender") + " — “" + (e.subject || "(no subject)") + "”" +
+      (e.disposition_reason ? " — " + e.disposition_reason : "");
+    return { ts: tsMs, type: type, title: title, detail: detail, wazuh: false };
   }
 
-  function ingest(email, opts) {
-    state.feed.unshift(email);
-    if (state.feed.length > 300) state.feed.length = 300;
-    var vinfo = VERDICTS[email.verdict];
-    if (email.verdict === "MALICIOUS") {
-      addAudit("critical", "Email blocked", email.fromAddr + " — “" + email.subject + "”", false);
-      addAudit("accent", "Alert sent to Wazuh", "Malicious verdict on " + email.id + " (score " + email.score + ") ingested as a security event", true);
-    } else if (email.verdict === "SUSPICIOUS") {
-      addAudit("serious", "Email quarantined", email.fromAddr + " — “" + email.subject + "”", false);
-      addAudit("accent", "Alert sent to Wazuh", "Suspicious verdict on " + email.id + " (score " + email.score + ") ingested as a security event", true);
-    } else if (!opts || !opts.silent) {
-      addAudit(email.verdict === "LOW" ? "warning" : "good", "Email delivered", email.fromAddr + " — “" + email.subject + "”", false);
-    }
+  function loadFeed() {
+    return Promise.all([
+      fetch("/api/feed", { credentials: "same-origin" }).then(function (r) { return r.json(); }),
+      fetch("/api/audit", { credentials: "same-origin" }).then(function (r) { return r.json(); })
+    ]).then(function (results) {
+      state.feed = results[0].entries || [];
+      state.audit = (results[1].entries || []).map(shadowLogToAuditEntry);
+      renderAll();
+    });
   }
-
-  /* ---- seed 24h of history so the page isn't empty on first paint ---- */
-  (function seed() {
-    var now = Date.now();
-    var n = 60 + Math.floor(Math.random() * 20);
-    var events = [];
-    for (var i = 0; i < n; i++) {
-      var t = now - Math.floor(Math.random() * 24 * 3600 * 1000);
-      events.push(makeEmail(t));
-    }
-    events.sort(function (a, b) { return a.ts - b.ts; });
-    events.forEach(function (e) { ingest(e, { silent: true }); });
-    state.feed.sort(function (a, b) { return b.ts - a.ts; });
-    // seed a couple of admin audit entries for flavor
-    if (state.feed.length) {
-      addAudit("good", "Console started", "Gateway console initialized — monitoring inbound mail", false);
-    }
-  })();
 
   /* ============================== FORMATTERS ============================== */
   function fmtTime(ts) {
@@ -1202,8 +1118,19 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  // feed_builder.py falls back to the raw address for fromName when an email
+  // has no display name — rendering both lines then just repeats the address.
+  function fromCellHtml(fromName, fromAddr) {
+    var inner = String(fromName).trim().toLowerCase() === String(fromAddr).trim().toLowerCase()
+      ? "<span>" + escapeHtml(fromAddr) + "</span>"
+      : "<span>" + escapeHtml(fromName) + '</span><span class="addr">' + escapeHtml(fromAddr) + "</span>";
+    return '<div class="cell-content-min">' + inner + "</div>";
+  }
 
   /* ============================== RENDER: STAT TILES ============================== */
+  // Phase 14: tiles are clickable filters over the Live feed table below,
+  // reusing the same active-tab pattern the Quarantine page's #qTabs already
+  // established (state.overviewFilter + a small filter fn renderFeed() consults).
   function renderStats() {
     var now = Date.now();
     var last24 = state.feed.filter(function (e) { return now - e.ts <= 24 * 3600 * 1000; });
@@ -1211,20 +1138,63 @@
     last24.forEach(function (e) { counts[e.verdict]++; });
     var total = last24.length;
     var tiles = [
-      { label: "Total, last 24h", value: total, icon: "eye", accentVar: "var(--accent)", sub: last24.length ? Math.round((counts.CLEAN + counts.LOW) / total * 100) + "% passed clean" : "No mail yet" },
-      { label: "Safe", value: counts.CLEAN + counts.LOW, icon: "good", accentVar: "var(--status-good)", sub: counts.CLEAN + " clean · " + counts.LOW + " low" },
-      { label: "Suspicious", value: counts.SUSPICIOUS, icon: "serious", accentVar: "var(--status-serious)", sub: "quarantined for review" },
-      { label: "Malicious", value: counts.MALICIOUS, icon: "critical", accentVar: "var(--status-critical)", sub: "blocked at the gateway" }
+      { filter: "all", label: "Total, last 24h", value: total, icon: "eye", accentVar: "var(--accent)", sub: last24.length ? Math.round((counts.CLEAN + counts.LOW) / total * 100) + "% passed clean" : "No mail yet" },
+      { filter: "safe", label: "Safe", value: counts.CLEAN + counts.LOW, icon: "good", accentVar: "var(--status-good)", sub: counts.CLEAN + " clean · " + counts.LOW + " low" },
+      { filter: "suspicious", label: "Suspicious", value: counts.SUSPICIOUS, icon: "serious", accentVar: "var(--status-serious)", sub: "quarantined for review" },
+      { filter: "malicious", label: "Malicious", value: counts.MALICIOUS, icon: "critical", accentVar: "var(--status-critical)", sub: "blocked at the gateway" }
     ];
     document.getElementById("statGrid").innerHTML = tiles.map(function (t) {
-      return '<div class="stat-tile" style="--tile-accent:' + t.accentVar + '">' +
+      var active = state.overviewFilter === t.filter;
+      return '<button type="button" class="stat-tile' + (active ? " active" : "") + '" data-filter="' + t.filter + '" style="--tile-accent:' + t.accentVar + '">' +
         '<div class="stat-label">' + ICON[t.icon] + t.label + "</div>" +
         '<div class="stat-value mono">' + t.value.toLocaleString() + "</div>" +
         '<div class="stat-sub">' + t.sub + "</div>" +
-        "</div>";
+        "</button>";
     }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("#statGrid .stat-tile"), function (btn) {
+      btn.addEventListener("click", function () {
+        state.overviewFilter = state.overviewFilter === btn.dataset.filter ? "all" : btn.dataset.filter;
+        renderStats();
+        renderFeed();
+      });
+    });
     document.getElementById("navQuarantineCount").textContent = counts.SUSPICIOUS + counts.MALICIOUS;
     document.getElementById("navQuarantineCount").dataset.zero = (counts.SUSPICIOUS + counts.MALICIOUS) === 0;
+  }
+
+  /* ============================== RENDER: POLICY PANEL ============================== */
+  // Sourced live from GET /api/policy (server/routers/policy.py) — real
+  // rules/policy.yaml state, Admin-only toggle switches write back via
+  // PUT /api/policy (see setPolicyCategory() above).
+  function renderPolicyPanel() {
+    var el = document.getElementById("policyGrid");
+    if (!el) return;
+    if (!POLICY.categories.length) {
+      el.innerHTML = '<div class="empty-state">Loading policy state…</div>';
+      return;
+    }
+    var isAdmin = window.__SEG_CURRENT_USER__ && window.__SEG_CURRENT_USER__.role === "admin";
+    el.innerHTML = POLICY.categories.map(function (c) {
+      return '<div class="policy-tile' + (c.enabled ? "" : " pt-off") + '">' +
+        '<span class="pt-dot"></span>' +
+        '<span class="pt-label">' + escapeHtml(c.label) + "</span>" +
+        '<button class="pt-switch" role="switch" aria-checked="' + (c.enabled ? "true" : "false") + '" ' +
+          'aria-label="' + escapeHtml(c.label) + (isAdmin ? "" : " (Admin only)") + '" ' +
+          'data-key="' + c.key + '"' + (isAdmin ? "" : " disabled") + "></button>" +
+        "</div>";
+    }).join("");
+    if (!isAdmin) return;
+    Array.prototype.forEach.call(el.querySelectorAll(".pt-switch"), function (btn) {
+      btn.addEventListener("click", function () {
+        var key = btn.dataset.key;
+        var nextEnabled = btn.getAttribute("aria-checked") !== "true";
+        btn.disabled = true;
+        setPolicyCategory(key, nextEnabled).then(renderPolicyPanel).catch(function (err) {
+          btn.disabled = false;
+          console.error(err);
+        });
+      });
+    });
   }
 
   /* ============================== RENDER: THREAT MIX BAR ============================== */
@@ -1345,29 +1315,50 @@
 
   /* ============================== RENDER: LIVE FEED ============================== */
   var lastRenderedFeedIds = [];
+  function feedMatchesOverviewFilter(e) {
+    if (state.overviewFilter === "safe") return e.verdict === "CLEAN" || e.verdict === "LOW";
+    if (state.overviewFilter === "suspicious") return e.verdict === "SUSPICIOUS";
+    if (state.overviewFilter === "malicious") return e.verdict === "MALICIOUS";
+    return true;
+  }
+  var OVERVIEW_FILTER_LABEL = { safe: "Safe", suspicious: "Suspicious", malicious: "Malicious" };
   function renderFeed() {
-    var rows = state.feed.slice(0, 60);
+    var badge = document.getElementById("feedFilterBadge");
+    if (state.overviewFilter === "all") {
+      badge.innerHTML = "";
+    } else {
+      badge.innerHTML = '<button type="button" class="btn btn-sm" id="feedFilterClear">Filtered: ' +
+        OVERVIEW_FILTER_LABEL[state.overviewFilter] + " ✕</button>";
+      document.getElementById("feedFilterClear").addEventListener("click", function () {
+        state.overviewFilter = "all";
+        renderStats();
+        renderFeed();
+      });
+    }
+    var rows = state.feed.filter(feedMatchesOverviewFilter).slice(0, 60);
     var body = document.getElementById("feedBody");
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Waiting for the first message…</div></td></tr>';
+      body.innerHTML = '<tr><td colspan="6"><div class="empty-state">' +
+        (state.overviewFilter === "all" ? "Waiting for the first message…" : "No messages match this filter.") +
+        "</div></td></tr>";
       return;
     }
     body.innerHTML = rows.map(function (e) {
       var isNew = lastRenderedFeedIds.indexOf(e.id) === -1;
       var vinfo = VERDICTS[e.verdict];
       var actionLabel = e.status === "released" ? "Released" : vinfo.action;
-      return '<tr class="row-stripe ' + vinfo.cls + (isNew ? " row-enter" : "") + '" data-id="' + e.id + '" style="cursor:pointer">' +
+      return '<tr class="row-stripe ' + vinfo.cls + (isNew ? " row-enter" : "") + '" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer">' +
         '<td class="cell-time">' + fmtTime(e.ts) + "</td>" +
         "<td>" + chip(e.verdict) + "</td>" +
-        '<td class="cell-from"><span>' + escapeHtml(e.fromName) + '</span><span class="addr">' + escapeHtml(e.fromAddr) + "</span></td>" +
-        '<td class="cell-subject">' + escapeHtml(e.subject) + "</td>" +
+        '<td class="cell-from">' + fromCellHtml(e.fromName, e.fromAddr) + "</td>" +
+        '<td class="cell-subject"><div class="cell-content-min"><div class="cell-subject-text">' + escapeHtml(e.subject) + "</div>" + categoryChipsHtml(e.reasons) + "</div></td>" +
         '<td class="cell-score">' + e.score + "</td>" +
         "<td>" + escapeHtml(actionLabel) + "</td>" +
         "</tr>";
     }).join("");
     lastRenderedFeedIds = rows.map(function (e) { return e.id; });
     Array.prototype.forEach.call(body.querySelectorAll("tr[data-id]"), function (tr) {
-      tr.addEventListener("click", function () { openDrawer(tr.dataset.id); });
+      tr.addEventListener("click", function () { openFloatWindow(tr.dataset.id); });
     });
   }
 
@@ -1410,31 +1401,30 @@
       return;
     }
     empty.style.display = "none";
+    // Just one action (View) per row now — Download/Re-evaluate/Release/
+    // Keep-blocked moved exclusively into the floating window's footer
+    // (populateFloatWindow()) so the row doesn't wrap onto a second line.
     body.innerHTML = filtered.map(function (e) {
       var vinfo = VERDICTS[e.verdict];
       var released = e.status === "released";
-      return '<tr class="row-stripe ' + vinfo.cls + '" data-id="' + e.id + '">' +
+      return '<tr class="row-stripe ' + vinfo.cls + '" data-id="' + escapeHtml(e.id) + '" style="cursor:pointer">' +
         '<td class="cell-time">' + fmtDateTime(e.ts) + "</td>" +
         "<td>" + (released ? '<span class="chip a-released">' + ICON.release + "Released</span>" : chip(e.verdict)) + "</td>" +
-        '<td class="cell-from"><span>' + escapeHtml(e.fromName) + '</span><span class="addr">' + escapeHtml(e.fromAddr) + "</span></td>" +
-        '<td class="cell-subject">' + escapeHtml(e.subject) + "</td>" +
+        '<td class="cell-from">' + fromCellHtml(e.fromName, e.fromAddr) + "</td>" +
+        '<td class="cell-subject"><div class="cell-content-min"><div class="cell-subject-text">' + escapeHtml(e.subject) + "</div>" + categoryChipsHtml(e.reasons) + "</div></td>" +
         '<td class="cell-score">' + e.score + "</td>" +
         '<td class="cell-time">' + (released ? "—" : fmtExpires(e.expiresAt)) + "</td>" +
-        '<td><div style="display:flex; gap:6px;">' +
-          '<button class="btn btn-sm" data-action="view" data-id="' + e.id + '">' + ICON.eye + "View</button>" +
-          '<button class="btn btn-sm" data-action="download" data-id="' + e.id + '">' + ICON.download + "EML</button>" +
-          (released ? "" : '<button class="btn btn-sm btn-primary" data-action="release" data-id="' + e.id + '">' + ICON.release + "Release</button>") +
-        "</div></td>" +
+        '<td><button class="btn btn-sm" data-action="view" data-id="' + escapeHtml(e.id) + '">' + ICON.eye + "View</button></td>" +
         "</tr>";
     }).join("");
 
+    Array.prototype.forEach.call(body.querySelectorAll("tr[data-id]"), function (tr) {
+      tr.addEventListener("click", function () { openFloatWindow(tr.dataset.id); });
+    });
     Array.prototype.forEach.call(body.querySelectorAll("button[data-action]"), function (btn) {
       btn.addEventListener("click", function (ev) {
         ev.stopPropagation();
-        var id = btn.dataset.id;
-        if (btn.dataset.action === "view") openDrawer(id);
-        else if (btn.dataset.action === "download") downloadEml(id);
-        else if (btn.dataset.action === "release") confirmRelease(id);
+        openFloatWindow(btn.dataset.id);
       });
     });
   }
@@ -1465,198 +1455,6 @@
     }).join("");
   }
 
-  /* ============================== ANALYZED SAMPLES (real agent output) ============================== */
-  // eml_analysis_agent.py rates on its own LOW/MEDIUM/HIGH/CRITICAL scale,
-  // deliberately separate from the gateway Verdict model above.
-  var RISK = {
-    CRITICAL: { cls: "r-critical", label: "Critical", icon: "critical" },
-    HIGH:     { cls: "r-high",     label: "High",     icon: "serious" },
-    MEDIUM:   { cls: "r-medium",   label: "Medium",   icon: "warning" },
-    LOW:      { cls: "r-low",      label: "Low",      icon: "good" },
-    UNKNOWN:  { cls: "r-unknown",  label: "Unknown",  icon: "warning" }
-  };
-  function riskInfo(level) { return RISK[(level || "UNKNOWN").toUpperCase()] || RISK.UNKNOWN; }
-  function riskChip(level) {
-    var r = riskInfo(level);
-    return '<span class="chip ' + r.cls + '">' + ICON[r.icon] + r.label + "</span>";
-  }
-  var SAMPLES = (window.PDAX_SAMPLES || []).slice();  // pre-sorted by build_samples_data.py
-
-  function findSample(src) { return SAMPLES.filter(function (s) { return s.source_file === src; })[0]; }
-
-  function renderSamples() {
-    var counts = { all: SAMPLES.length, critical: 0, high: 0, medium: 0, low: 0 };
-    SAMPLES.forEach(function (s) {
-      var k = (s.risk_level || "").toLowerCase();
-      if (counts[k] !== undefined) counts[k]++;
-    });
-    document.getElementById("scAll").textContent = counts.all;
-    document.getElementById("scCritical").textContent = counts.critical;
-    document.getElementById("scHigh").textContent = counts.high;
-    document.getElementById("scMedium").textContent = counts.medium;
-    document.getElementById("scLow").textContent = counts.low;
-    var threats = counts.critical + counts.high;
-    var navC = document.getElementById("navSamplesCount");
-    navC.textContent = SAMPLES.length;
-    navC.dataset.zero = SAMPLES.length === 0;
-    navC.style.background = threats ? "var(--status-serious)" : "var(--accent)";
-    document.getElementById("samplesCountInline").textContent = SAMPLES.length;
-
-    var filtered = SAMPLES.filter(function (s) {
-      if (state.sFilter !== "all" && (s.risk_level || "").toLowerCase() !== state.sFilter) return false;
-      if (state.sSearch) {
-        var q = state.sSearch.toLowerCase();
-        var hay = [s.metadata.from, s.metadata.subject, s.content.category, s.source_file]
-          .concat(s.indicators).join(" ").toLowerCase();
-        if (hay.indexOf(q) === -1) return false;
-      }
-      return true;
-    });
-
-    var body = document.getElementById("samplesBody");
-    var empty = document.getElementById("samplesEmpty");
-    if (!filtered.length) { body.innerHTML = ""; empty.style.display = "block"; return; }
-    empty.style.display = "none";
-    body.innerHTML = filtered.map(function (s) {
-      var r = riskInfo(s.risk_level);
-      var inds = (s.indicators || []).slice(0, 2).map(function (i) { return '<span class="pill">' + escapeHtml(i) + "</span>"; }).join("");
-      var extra = (s.indicators || []).length > 2 ? '<span class="pill">+' + ((s.indicators.length) - 2) + "</span>" : "";
-      var indCell = (s.indicators && s.indicators.length) ? '<div class="pill-row">' + inds + extra + "</div>" : '<span class="ioc-empty">none</span>';
-      return '<tr class="row-stripe ' + r.cls + '" data-src="' + escapeHtml(s.source_file) + '" style="cursor:pointer">' +
-        "<td>" + riskChip(s.risk_level) + "</td>" +
-        '<td class="cell-score">' + (s.risk_score === null ? "–" : s.risk_score) + "</td>" +
-        '<td class="cell-from"><span class="addr">' + escapeHtml(s.metadata.from || "(unknown)") + "</span></td>" +
-        '<td class="cell-subject">' + escapeHtml(s.metadata.subject || "(no subject)") + "</td>" +
-        "<td>" + escapeHtml(s.content.category || "—") + "</td>" +
-        '<td class="cell-indicators">' + indCell + "</td>" +
-        "</tr>";
-    }).join("");
-    Array.prototype.forEach.call(body.querySelectorAll("tr[data-src]"), function (tr) {
-      tr.addEventListener("click", function () { openSampleDrawer(tr.dataset.src); });
-    });
-  }
-
-  function pillList(items, danger) {
-    if (!items || !items.length) return '<span class="ioc-empty">none</span>';
-    return '<div class="pill-row">' + items.map(function (i) {
-      return '<span class="pill' + (danger ? " danger" : "") + '">' + escapeHtml(i) + "</span>";
-    }).join("") + "</div>";
-  }
-
-  function sampleTextReport(s) {
-    var L = [];
-    var bar = new Array(65).join("=");
-    L.push(bar);
-    L.push("  RISK: " + (s.risk_level || "UNKNOWN") + "   score=" + (s.risk_score === null ? "n/a" : s.risk_score) + "/100");
-    if (s.warning) L.push("  WARNING: " + s.warning);
-    L.push(bar);
-    L.push("Source  : " + s.source_file);
-    L.push("From    : " + s.metadata.from);
-    L.push("To      : " + s.metadata.to);
-    L.push("Subject : " + s.metadata.subject);
-    L.push("Date    : " + s.metadata.date);
-    L.push("");
-    L.push("Auth    : IP " + (s.auth.originating_ip || "?") + " | SPF " + s.auth.spf + " | DKIM " + s.auth.dkim +
-      (s.auth.address_mismatch ? " | ADDRESS MISMATCH" : ""));
-    if (s.auth.mismatch_details) L.push("          " + s.auth.mismatch_details);
-    L.push("");
-    L.push("Summary : " + s.content.summary);
-    L.push("Category: " + s.content.category + "  (" + s.content.sentiment + ")");
-    L.push("");
-    L.push("Indicators: " + ((s.indicators || []).join(", ") || "none"));
-    if ((s.suspicious_urls || []).length) {
-      L.push("");
-      L.push("Suspicious URLs:");
-      s.suspicious_urls.forEach(function (u) { L.push("  - [" + (u.mismatch ? "MISMATCH" : "ok") + "] " + u.actual_url); });
-    }
-    if ((s.attachments || []).length) {
-      L.push("");
-      L.push("Attachments:");
-      s.attachments.forEach(function (a) { L.push("  - [" + (a.flagged ? "FLAGGED" : "ok") + "] " + a.filename + " (" + a.type + ") " + a.reason); });
-    }
-    return L.join("\n");
-  }
-
-  function openSampleDrawer(src) {
-    var s = findSample(src);
-    if (!s) return;
-    document.getElementById("drawerSubject").textContent = s.metadata.subject || s.source_file;
-    var ent = s.content.entities || {};
-    var html = "";
-    html += '<div class="drawer-field"><span class="df-label">Risk</span><div>' + riskChip(s.risk_level) +
-      ' <span class="mono" style="margin-left:6px;">score ' + (s.risk_score === null ? "n/a" : s.risk_score) + "/100</span></div></div>";
-    if (s.warning) {
-      html += '<div class="override-banner">' + ICON.warning + "<span>" + escapeHtml(s.warning) + "</span></div>";
-    }
-    html += '<div class="drawer-field"><span class="df-label">Source file</span><span class="df-value mono">' + escapeHtml(s.source_file) + "</span></div>";
-    html += '<div class="drawer-field"><span class="df-label">From</span><span class="df-value mono">' + escapeHtml(s.metadata.from || "(unknown)") + "</span></div>";
-    html += '<div class="drawer-field"><span class="df-label">To</span><span class="df-value mono">' + escapeHtml(s.metadata.to || "—") + "</span></div>";
-    html += '<div class="drawer-field"><span class="df-label">Date</span><span class="df-value mono">' + escapeHtml(s.metadata.date || "—") + "</span></div>";
-    if (s.metadata.message_id) html += '<div class="drawer-field"><span class="df-label">Message-ID</span><span class="df-value mono">' + escapeHtml(s.metadata.message_id) + "</span></div>";
-
-    html += '<div class="drawer-field"><span class="df-label">Authentication forensics</span><div class="stage-mini">' +
-      '<div class="stage-row" style="grid-template-columns:120px 1fr;"><span class="sr-name">Originating IP</span><span class="mono">' + escapeHtml(s.auth.originating_ip || "unknown") + "</span></div>" +
-      '<div class="stage-row" style="grid-template-columns:120px 1fr;"><span class="sr-name">SPF</span><span class="mono">' + escapeHtml(s.auth.spf || "?") + "</span></div>" +
-      '<div class="stage-row" style="grid-template-columns:120px 1fr;"><span class="sr-name">DKIM</span><span class="mono">' + escapeHtml(s.auth.dkim || "?") + "</span></div>" +
-      '<div class="stage-row" style="grid-template-columns:120px 1fr;"><span class="sr-name">Address mismatch</span><span class="mono">' + (s.auth.address_mismatch ? "yes" : "no") + "</span></div>" +
-      "</div>" +
-      (s.auth.mismatch_details ? '<div style="font-size:12px; color:var(--status-serious); margin-top:6px;">' + escapeHtml(s.auth.mismatch_details) + "</div>" : "") +
-      "</div>";
-
-    if (s.content.summary) {
-      html += '<div class="ai-callout"><span class="ai-label">AI assessment</span>' + escapeHtml(s.content.summary) + "</div>";
-    }
-    html += '<div class="drawer-field"><span class="df-label">Category / sentiment</span><span class="df-value">' +
-      escapeHtml(s.content.category || "—") + " · " + escapeHtml(s.content.sentiment || "—") + "</span></div>";
-
-    html += '<div class="drawer-field"><span class="df-label">Indicators</span>' + pillList(s.indicators, true) + "</div>";
-
-    var entHtml = "";
-    [["People", ent.people], ["Organizations", ent.organizations], ["Dates", ent.dates_mentioned], ["Amounts", ent.amounts_mentioned]].forEach(function (pair) {
-      if (pair[1] && pair[1].length) entHtml += '<div style="margin-bottom:6px;"><span class="df-label">' + pair[0] + "</span>" + pillList(pair[1]) + "</div>";
-    });
-    if (entHtml) html += '<div class="drawer-field"><span class="df-label" style="margin-bottom:6px;">Entities</span>' + entHtml + "</div>";
-
-    if ((s.content.action_items || []).length) {
-      html += '<div class="drawer-field"><span class="df-label">Action items</span><ul class="reason-list">' +
-        s.content.action_items.map(function (a) { return "<li>" + escapeHtml(a) + "</li>"; }).join("") + "</ul></div>";
-    }
-
-    html += '<div class="drawer-field"><span class="df-label">Suspicious URLs</span>';
-    if ((s.suspicious_urls || []).length) {
-      html += s.suspicious_urls.map(function (u) {
-        return '<div class="ioc-item">' + escapeHtml(u.actual_url) +
-          (u.display_text ? '<span class="ib-note" style="color:var(--ink-muted); font-weight:500;">shown as: ' + escapeHtml(u.display_text) + "</span>" : "") +
-          (u.mismatch ? '<span class="ib-note">⚠ display/target mismatch</span>' : "") + "</div>";
-      }).join("");
-    } else { html += '<span class="ioc-empty">none observed</span>'; }
-    html += "</div>";
-
-    html += '<div class="drawer-field"><span class="df-label">Attachments</span>';
-    if ((s.attachments || []).length) {
-      html += s.attachments.map(function (a) {
-        return '<div class="ioc-item">' + escapeHtml(a.filename) + " <span style=\"color:var(--ink-muted);\">(" + escapeHtml(a.type) + ")</span>" +
-          (a.reason ? '<span class="ib-note" style="color:var(--ink-muted); font-weight:500;">' + escapeHtml(a.reason) + "</span>" : "") +
-          (a.flagged ? '<span class="ib-note">⚠ flagged</span>' : "") + "</div>";
-      }).join("");
-    } else { html += '<span class="ioc-empty">none found</span>'; }
-    html += "</div>";
-
-    document.getElementById("drawerBody").innerHTML = html;
-    var foot = document.getElementById("drawerFoot");
-    foot.innerHTML = '<button class="btn btn-sm" data-sample-copy="1">' + ICON.download + "Copy report</button>";
-    foot.querySelector("[data-sample-copy]").addEventListener("click", function () {
-      var text = sampleTextReport(s);
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () { toast(ICON.download, "Report copied to clipboard"); },
-          function () { console.log(text); toast(ICON.download, "Clipboard unavailable — printed to console"); });
-      } else { console.log(text); toast(ICON.download, "Clipboard unavailable — printed to console"); }
-    });
-
-    document.getElementById("drawerOverlay").classList.add("show");
-    document.getElementById("drawer").classList.add("show");
-  }
-
   /* ============================== DRAWER ============================== */
   function findEmail(id) { return state.feed.filter(function (e) { return e.id === id; })[0]; }
 
@@ -1681,20 +1479,25 @@
     var margin = e.hardOverride ? "" : "  (" + verdictMargin(e.verdict, e.score) + ")";
     lines.push(bar);
     lines.push("  VERDICT: " + e.verdict + "   score=" + e.score + margin);
-    if (e.hardOverride) lines.push("  HARD OVERRIDE: " + e.hardOverride + " — " + overrideDesc(e.hardOverride));
+    if (e.hardOverride) lines.push("  HARD OVERRIDE: " + e.hardOverride + " — " + describeFlag(e.hardOverride));
     lines.push(bar);
     lines.push("From    : \"" + e.fromName + "\" <" + e.fromAddr + ">");
     lines.push("Subject : " + e.subject);
-    lines.push("Source  : file");
+    lines.push("Source  : " + (e.sourceKind === "sample" ? "file (" + e.sourceFile + ")" : "gateway/spool/" + e.bucket + "/" + e.queueId));
     lines.push("");
-    lines.push("Stages:");
     var aiSummary = "";
-    STAGE_ORDER.forEach(function (name) {
-      var s = e.stages[name];
-      var flags = (s.flags && s.flags.length) ? s.flags.join(", ") : "-";
-      lines.push("  [" + padStart(s.status, 8) + "] " + pad(name, 12) + " score=" + padStart(s.score.toFixed(1), 5) + "  " + flags);
-      if (name === "content_ai" && s.summary) aiSummary = s.summary;
-    });
+    if (e.hasStageDetail) {
+      lines.push("Stages:");
+      STAGE_ORDER.forEach(function (name) {
+        var s = e.stages[name];
+        if (!s) return;
+        var flags = (s.flags && s.flags.length) ? s.flags.join(", ") : "-";
+        lines.push("  [" + padStart(s.status, 8) + "] " + pad(name, 12) + " score=" + padStart(s.score.toFixed(1), 5) + "  " + flags);
+        if (name === "content_ai" && s.summary) aiSummary = s.summary;
+      });
+    } else {
+      lines.push("Stages: not available for previously-processed mail (meta.json summary only) — use Re-evaluate for a fresh, fully-detailed run.");
+    }
     lines.push("");
     if (aiSummary) { lines.push("AI assessment: " + aiSummary); lines.push(""); }
     lines.push("Why this verdict:");
@@ -1737,30 +1540,33 @@
     }
   }
 
-  function openDrawer(id) {
-    var e = findEmail(id);
-    if (!e) return;
+  function buildPreviewBodyHtml(e) {
     var vinfo = VERDICTS[e.verdict];
-    document.getElementById("drawerSubject").textContent = e.subject;
-
     var html = "";
     html += '<div class="drawer-field"><span class="df-label">Verdict</span><div>' + chip(e.verdict) +
       ' <span class="mono" style="margin-left:6px;">score ' + e.score + "/100</span></div>" +
       (e.hardOverride
-        ? '<div style="margin-top:6px;">' + '<div class="override-banner">' + ICON.critical + "<span><strong>Hard override: " + e.hardOverride + ".</strong> " + escapeHtml(overrideDesc(e.hardOverride)) + "</span></div></div>"
+        ? '<div style="margin-top:6px;">' + '<div class="override-banner">' + ICON.critical + "<span><strong>Hard override: " + e.hardOverride + ".</strong> " + escapeHtml(describeFlag(e.hardOverride)) + "</span></div></div>"
         : '<div class="df-value" style="margin-top:4px; color:var(--ink-muted); font-size:12px;">' + escapeHtml(verdictMargin(e.verdict, e.score)) + "</div>") +
       "</div>";
     html += '<div class="drawer-field"><span class="df-label">From</span><span class="df-value mono">' + escapeHtml(e.fromName) + " &lt;" + escapeHtml(e.fromAddr) + "&gt;</span></div>";
     html += '<div class="drawer-field"><span class="df-label">Received</span><span class="df-value mono">' + fmtDateTime(e.ts) + "</span></div>";
-    html += '<div class="drawer-field"><span class="df-label">Message ID</span><span class="df-value mono">' + e.id + "@pdax-email-core</span></div>";
+    html += '<div class="drawer-field"><span class="df-label">Message ID</span><span class="df-value mono">' + escapeHtml(e.id) + "@pdax-email-core</span></div>";
     html += '<div class="drawer-field"><span class="df-label">Action taken</span><span class="df-value">' + (e.status === "released" ? "Released by admin" : vinfo.action) + "</span></div>";
 
-    html += '<div class="drawer-field"><span class="df-label">Stages</span><div class="stage-mini">' +
-      STAGE_ORDER.map(function (name) {
-        var s = e.stages[name];
-        var flags = (s.flags && s.flags.length) ? s.flags.join(", ") : "—";
-        return '<div class="stage-row" data-status="' + s.status + '"><span class="sr-name">' + name + '</span><span class="sr-score">' + s.score.toFixed(1) + '</span><span class="sr-flags">' + escapeHtml(flags) + "</span></div>";
-      }).join("") + "</div></div>";
+    if (e.hasStageDetail) {
+      html += '<div class="drawer-field"><span class="df-label">Stages</span><div class="stage-mini">' +
+        STAGE_ORDER.map(function (name) {
+          var s = e.stages[name];
+          if (!s) return "";
+          var flags = (s.flags && s.flags.length) ? s.flags.join(", ") : "—";
+          return '<div class="stage-row" data-status="' + s.status + '"><span class="sr-name">' + name + '</span><span class="sr-score">' + s.score.toFixed(1) + '</span><span class="sr-flags">' + escapeHtml(flags) + "</span></div>";
+        }).join("") + "</div></div>";
+    } else {
+      html += '<div class="drawer-field"><span class="df-label">Stages</span>' +
+        '<div class="ioc-empty">Detailed per-stage breakdown isn\'t available for previously-processed mail — ' +
+        'only the final verdict/score/reasons from meta.json. Use "Re-evaluate" for a fresh, fully-detailed run.</div></div>';
+    }
 
     var aiSummary = e.stages.content_ai && e.stages.content_ai.summary;
     if (aiSummary) {
@@ -1786,99 +1592,277 @@
     if (e.status !== "released" && (e.verdict === "SUSPICIOUS" || e.verdict === "MALICIOUS")) {
       html += '<div class="retention-note">EML retained for admin retest until <strong>' + fmtDateTime(e.expiresAt) + "</strong> (7-day policy), then purged.</div>";
     }
-    document.getElementById("drawerBody").innerHTML = html;
-
-    var foot = document.getElementById("drawerFoot");
-    foot.innerHTML = '<button class="btn btn-sm" data-drawer-action="copy">' + ICON.download + "Copy report</button>" +
-      '<button class="btn btn-sm" data-drawer-action="download">' + ICON.download + "Download EML</button>" +
-      ((e.verdict === "SUSPICIOUS" || e.verdict === "MALICIOUS") && e.status !== "released"
-        ? '<button class="btn btn-sm btn-primary" data-drawer-action="release">' + ICON.release + "Release</button>" : "");
-    foot.querySelector('[data-drawer-action="copy"]').addEventListener("click", function () { copyReport(e.id); });
-    foot.querySelector('[data-drawer-action="download"]').addEventListener("click", function () { downloadEml(e.id); });
-    var relBtn = foot.querySelector('[data-drawer-action="release"]');
-    if (relBtn) relBtn.addEventListener("click", function () { closeDrawer(); confirmRelease(e.id); });
-
-    document.getElementById("drawerOverlay").classList.add("show");
-    document.getElementById("drawer").classList.add("show");
+    return html;
   }
-  function closeDrawer() {
-    document.getElementById("drawerOverlay").classList.remove("show");
-    document.getElementById("drawer").classList.remove("show");
+
+  function buildPreviewFootHtml(e) {
+    var canActOnThis = e.sourceKind === "spool" && canAct();
+    return '<button class="btn btn-sm" data-fw-action="copy">' + ICON.download + "Copy report</button>" +
+      (canActOnThis ? '<button class="btn btn-sm" data-fw-action="download">' + ICON.download + "Download EML</button>" +
+        '<button class="btn btn-sm" data-fw-action="reevaluate">' + ICON.eye + "Re-evaluate</button>" : "") +
+      (canActOnThis && (e.verdict === "SUSPICIOUS" || e.verdict === "MALICIOUS") && e.status !== "released"
+        ? '<button class="btn btn-sm btn-primary" data-fw-action="release">' + ICON.release + "Release</button>" +
+          '<button class="btn btn-sm" data-fw-action="keepblocked">' + ICON.critical + "Keep blocked</button>" : "");
   }
-  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
-  document.getElementById("drawerOverlay").addEventListener("click", closeDrawer);
+
+  /* ============================== FLOATING PREVIEW WINDOWS (Phase 14) ============================== */
+  // Replaces the old fixed side drawer. The user explicitly asked for a
+  // floating, desktop-window-style component (draggable title bar, resizable
+  // corner, minimize/maximize/close) rather than a modal — background
+  // interaction stays possible, and several windows can be open at once.
+  var floatWindows = {};   // message id -> window element
+  var fwZCounter = 100;
+  var FW_DEFAULT_W = 640, FW_DEFAULT_H = 720, FW_MIN_W = 380, FW_MIN_H = 260;
+
+  function bringFloatWindowToFront(win) {
+    fwZCounter += 1;
+    win.style.zIndex = fwZCounter;
+    Object.keys(floatWindows).forEach(function (id) { floatWindows[id].classList.toggle("focused", floatWindows[id] === win); });
+  }
+
+  function closeFloatWindow(id) {
+    var win = floatWindows[id];
+    if (!win) return;
+    win.remove();
+    delete floatWindows[id];
+  }
+
+  function refreshFloatWindow(id) {
+    // Re-render a window's content in place after a state-changing action
+    // (release / keep-blocked / re-evaluate) instead of closing it.
+    var win = floatWindows[id];
+    var e = findEmail(id);
+    if (!win || !e) return;
+    populateFloatWindow(win, e);
+  }
+
+  function populateFloatWindow(win, e) {
+    win.querySelector(".fw-subject").textContent = e.subject || "(no subject)";
+    win.querySelector(".fw-body").innerHTML = buildPreviewBodyHtml(e);
+    var foot = win.querySelector(".fw-foot");
+    foot.innerHTML = buildPreviewFootHtml(e);
+    var copyBtn = foot.querySelector('[data-fw-action="copy"]');
+    if (copyBtn) copyBtn.addEventListener("click", function () { copyReport(e.id); });
+    var dlBtn = foot.querySelector('[data-fw-action="download"]');
+    if (dlBtn) dlBtn.addEventListener("click", function () { downloadEml(e.id); });
+    var reBtn = foot.querySelector('[data-fw-action="reevaluate"]');
+    if (reBtn) reBtn.addEventListener("click", function () { reevaluateEntry(e.id); });
+    var relBtn = foot.querySelector('[data-fw-action="release"]');
+    if (relBtn) relBtn.addEventListener("click", function () { confirmRelease(e.id); });
+    var kbBtn = foot.querySelector('[data-fw-action="keepblocked"]');
+    if (kbBtn) kbBtn.addEventListener("click", function () { confirmKeepBlocked(e.id); });
+  }
+
+  function wireFloatWindowDrag(win) {
+    var head = win.querySelector(".fw-head");
+    head.addEventListener("mousedown", function (ev) {
+      if (ev.target.closest(".fw-btn")) return;
+      if (win.classList.contains("maximized")) return;
+      bringFloatWindowToFront(win);
+      var startX = ev.clientX, startY = ev.clientY;
+      var startLeft = win.offsetLeft, startTop = win.offsetTop;
+      function onMove(mv) {
+        win.style.left = Math.max(0, startLeft + (mv.clientX - startX)) + "px";
+        win.style.top = Math.max(0, startTop + (mv.clientY - startY)) + "px";
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      ev.preventDefault();
+    });
+  }
+
+  function wireFloatWindowResize(win) {
+    win.querySelector(".fw-resize").addEventListener("mousedown", function (ev) {
+      if (win.classList.contains("maximized") || win.classList.contains("minimized")) return;
+      bringFloatWindowToFront(win);
+      var startX = ev.clientX, startY = ev.clientY;
+      var startW = win.offsetWidth, startH = win.offsetHeight;
+      function onMove(mv) {
+        win.style.width = Math.max(FW_MIN_W, startW + (mv.clientX - startX)) + "px";
+        win.style.height = Math.max(FW_MIN_H, startH + (mv.clientY - startY)) + "px";
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+  }
+
+  function wireFloatWindowChrome(win, id) {
+    wireFloatWindowDrag(win);
+    wireFloatWindowResize(win);
+    win.addEventListener("mousedown", function () { bringFloatWindowToFront(win); });
+    win.querySelector('[data-fw="close"]').addEventListener("click", function () { closeFloatWindow(id); });
+    win.querySelector('[data-fw="min"]').addEventListener("click", function () {
+      win.classList.toggle("minimized");
+    });
+    win.querySelector('[data-fw="max"]').addEventListener("click", function (ev) {
+      var btn = ev.currentTarget;
+      if (win.classList.contains("maximized")) {
+        win.classList.remove("maximized");
+        win.style.left = win.dataset.preLeft; win.style.top = win.dataset.preTop;
+        win.style.width = win.dataset.preW; win.style.height = win.dataset.preH;
+        btn.innerHTML = ICON.maximize;
+        btn.setAttribute("aria-label", "Maximize");
+      } else {
+        win.dataset.preLeft = win.style.left; win.dataset.preTop = win.style.top;
+        win.dataset.preW = win.style.width; win.dataset.preH = win.style.height;
+        win.classList.remove("minimized");
+        win.classList.add("maximized");
+        win.style.left = "0"; win.style.top = "0";
+        win.style.width = "100%"; win.style.height = "100%";
+        btn.innerHTML = ICON.restore;
+        btn.setAttribute("aria-label", "Restore");
+      }
+    });
+  }
+
+  function openFloatWindow(id) {
+    var e = findEmail(id);
+    if (!e) return;
+    if (floatWindows[id]) { bringFloatWindowToFront(floatWindows[id]); return; }
+
+    var openCount = Object.keys(floatWindows).length;
+    var cascade = (openCount % 8) * 28;
+    var left = Math.max(12, Math.min(window.innerWidth - FW_DEFAULT_W - 12, (window.innerWidth - FW_DEFAULT_W) / 2 + cascade));
+    var top = Math.max(12, Math.min(window.innerHeight - 120, (window.innerHeight - FW_DEFAULT_H) / 2 + cascade));
+
+    var win = document.createElement("div");
+    win.className = "float-win";
+    win.setAttribute("role", "dialog");
+    win.setAttribute("aria-label", e.subject || "Message preview");
+    win.style.width = FW_DEFAULT_W + "px";
+    win.style.height = FW_DEFAULT_H + "px";
+    win.style.left = left + "px";
+    win.style.top = top + "px";
+    win.innerHTML =
+      '<div class="fw-head">' +
+        '<span class="fw-subject"></span>' +
+        '<div class="fw-controls">' +
+          '<button class="fw-btn" data-fw="min" aria-label="Minimize">' + ICON.minimize + "</button>" +
+          '<button class="fw-btn" data-fw="max" aria-label="Maximize">' + ICON.maximize + "</button>" +
+          '<button class="fw-btn fw-close" data-fw="close" aria-label="Close">' + ICON.close + "</button>" +
+        "</div>" +
+      "</div>" +
+      '<div class="fw-body"></div>' +
+      '<div class="fw-foot"></div>' +
+      '<div class="fw-resize"></div>';
+    document.getElementById("floatWinLayer").appendChild(win);
+    floatWindows[id] = win;
+    populateFloatWindow(win, e);
+    wireFloatWindowChrome(win, id);
+    bringFloatWindowToFront(win);
+  }
 
   function cancelRelease() {
-    pendingReleaseId = null;
+    pendingAction = null;
     document.getElementById("modalOverlay").classList.remove("show");
   }
   // Click the dimmed backdrop (not the modal card itself) to dismiss.
   document.getElementById("modalOverlay").addEventListener("click", function (ev) {
     if (ev.target === this) cancelRelease();
   });
-  // Escape closes whatever is on top: modal first, then drawer.
+  // Escape closes whatever is on top: modal first, then the frontmost floating window.
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") return;
-    if (document.getElementById("modalOverlay").classList.contains("show")) cancelRelease();
-    else if (document.getElementById("drawer").classList.contains("show")) closeDrawer();
+    if (document.getElementById("modalOverlay").classList.contains("show")) { cancelRelease(); return; }
+    var ids = Object.keys(floatWindows);
+    if (!ids.length) return;
+    var topId = ids.reduce(function (best, id) {
+      return (!best || parseInt(floatWindows[id].style.zIndex, 10) > parseInt(floatWindows[best].style.zIndex, 10)) ? id : best;
+    }, null);
+    if (topId) closeFloatWindow(topId);
   });
 
-  /* ============================== ACTIONS: DOWNLOAD / RELEASE ============================== */
-  function downloadEml(id) {
-    var e = findEmail(id);
-    if (!e) return;
-    var raw = "Return-Path: <" + e.fromAddr + ">\r\n" +
-      "Received: from mail-relay.example (unknown [203.0.113.5])\r\n" +
-      "\tby gw.pdax.ph (pdax-email-core) with ESMTPS id " + e.id + ";\r\n" +
-      "\t" + new Date(e.ts).toUTCString() + "\r\n" +
-      "From: \"" + e.fromName + "\" <" + e.fromAddr + ">\r\n" +
-      "To: employee@pdax.ph\r\n" +
-      "Subject: " + e.subject + "\r\n" +
-      "Date: " + new Date(e.ts).toUTCString() + "\r\n" +
-      "Message-ID: <" + e.id + "@pdax-email-core>\r\n" +
-      "X-PDAX-Verdict: " + e.verdict + " (score " + e.score + "/100)\r\n" +
-      "X-PDAX-Reasons: " + e.reasons.join("; ") + "\r\n" +
-      "Content-Type: text/plain; charset=utf-8\r\n\r\n" +
-      "[Synthetic prototype message — no real content. Generated for dashboard design review.]\r\n\r\n" +
-      "--- pdax-email-core findings (analyze.py --json equivalent) ---\r\n\r\n" +
-      buildTextReport(e).replace(/\n/g, "\r\n") + "\r\n";
-    var blob = new Blob([raw], { type: "message/rfc822" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = e.id + ".eml";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-    addAudit("accent", "EML downloaded", "Admin downloaded " + e.id + " for retest", false);
-    renderAudit();
-    toast(ICON.download, "Downloaded " + e.id + ".eml");
+  /* ============================== ACTIONS: DOWNLOAD / RELEASE / KEEP BLOCKED ============================== */
+  // All three call the real backend (server/routers/feed.py, wrapping
+  // app/disposition.py's existing release_from_quarantine()/keep_blocked())
+  // and only apply to spool-sourced entries (e.sourceKind === "spool",
+  // e.queueId set) — samples/*.eml pipeline-run entries are an eval corpus,
+  // not queued mail pending a triage decision, so they get no action
+  // buttons at all (see renderQuarantine()/renderFeed()).
+  function canAct() {
+    var u = window.__SEG_CURRENT_USER__;
+    return !!u && (u.role === "admin" || u.role === "analyst");
   }
 
-  var pendingReleaseId = null;
+  function downloadEml(id) {
+    var e = findEmail(id);
+    if (!e || !e.queueId) return;
+    window.location.href = "/api/quarantine/" + encodeURIComponent(e.queueId) + "/download";
+    toast(ICON.download, "Downloading " + e.id + ".eml");
+  }
+
+  var pendingAction = null;   // { id, kind: "release" | "keepblocked" }
   function confirmRelease(id) {
     var e = findEmail(id);
     if (!e) return;
-    pendingReleaseId = id;
+    pendingAction = { id: id, kind: "release" };
     document.getElementById("modalTitle").textContent = "Release this email?";
-    document.getElementById("modalBody").textContent = "This delivers the message to the original recipient's inbox and logs the action to the audit trail. Use this only after retesting confirms it's safe.";
+    document.getElementById("modalBody").textContent = "This moves the message out of quarantine (gateway/spool/released/) and logs the action to the audit trail. Use this only after retesting confirms it's safe.";
+    document.getElementById("modalDetail").textContent = e.fromAddr + " — “" + e.subject + "”";
+    document.getElementById("modalOverlay").classList.add("show");
+  }
+  function reevaluateEntry(id) {
+    var e = findEmail(id);
+    if (!e || !e.queueId) return;
+    toast(ICON.eye, "Re-evaluating " + e.id + "…");
+    fetch("/api/quarantine/" + encodeURIComponent(e.queueId) + "/reevaluate", {
+      method: "POST", credentials: "same-origin"
+    }).then(function (r) {
+      if (!r.ok) throw new Error("re-evaluate failed (" + r.status + ")");
+      return r.json();
+    }).then(function (body) {
+      return loadFeed().then(function () {
+        toast(ICON.good, e.id + " re-evaluated: " + body.reeval.new_verdict + " (was " + body.reeval.previous_verdict + ")");
+        refreshFloatWindow(id);
+      });
+    }).catch(function (err) {
+      toast(ICON.warning, "Re-evaluate failed — " + err.message);
+    });
+  }
+
+  function confirmKeepBlocked(id) {
+    var e = findEmail(id);
+    if (!e) return;
+    pendingAction = { id: id, kind: "keepblocked" };
+    document.getElementById("modalTitle").textContent = "Keep this email blocked?";
+    document.getElementById("modalBody").textContent = "This confirms the block and moves the message to gateway/spool/rejected/.";
     document.getElementById("modalDetail").textContent = e.fromAddr + " — “" + e.subject + "”";
     document.getElementById("modalOverlay").classList.add("show");
   }
   document.getElementById("modalCancel").addEventListener("click", cancelRelease);
   document.getElementById("modalConfirm").addEventListener("click", function () {
-    if (pendingReleaseId) {
-      var e = findEmail(pendingReleaseId);
-      if (e) {
-        e.status = "released";
-        addAudit("accent", "Email released from quarantine", "Admin released " + e.id + " (" + e.fromAddr + ") after retest", false);
-        renderAll();
-        toast(ICON.release, "Released " + e.id + " to inbox");
-      }
-    }
-    pendingReleaseId = null;
-    document.getElementById("modalOverlay").classList.remove("show");
+    if (!pendingAction) { document.getElementById("modalOverlay").classList.remove("show"); return; }
+    var e = findEmail(pendingAction.id);
+    var actedId = pendingAction.id;
+    var endpoint = pendingAction.kind === "release" ? "release" : "keep-blocked";
+    var btn = this;
+    btn.disabled = true;
+    fetch("/api/quarantine/" + encodeURIComponent(e.queueId) + "/" + endpoint, {
+      method: "POST", credentials: "same-origin"
+    }).then(function (r) {
+      if (!r.ok) throw new Error("action failed (" + r.status + ")");
+      return loadFeed();
+    }).then(function () {
+      toast(pendingAction.kind === "release" ? ICON.release : ICON.critical,
+        (pendingAction.kind === "release" ? "Released " : "Kept blocked: ") + e.id);
+      refreshFloatWindow(actedId);
+    }).catch(function (err) {
+      toast(ICON.warning, "Action failed — " + err.message);
+    }).finally(function () {
+      btn.disabled = false;
+      pendingAction = null;
+      document.getElementById("modalOverlay").classList.remove("show");
+    });
   });
 
   function toast(icon, msg) {
@@ -1898,8 +1882,7 @@
   var PAGE_META = {
     overview: ["Overview", "Live view of mail arriving at the gateway, before Google Workspace"],
     quarantine: ["Blocked & quarantined", "Everything held at the gateway — retained 7 days for admin retest"],
-    audit: ["Audit log", "Every gateway decision and admin action, including alerts ingested to Wazuh"],
-    samples: ["Analyzed samples", "Real eml_analysis_agent.py reports over the samples/ corpus — the agent's own risk ratings"]
+    audit: ["Audit log", "Every gateway decision and admin action, including alerts ingested to Wazuh"]
   };
   function setPage(page) {
     state.activePage = page;
@@ -1923,14 +1906,6 @@
     });
   });
   document.getElementById("qSearch").addEventListener("input", function (e) { state.qSearch = e.target.value; renderQuarantine(); });
-  Array.prototype.forEach.call(document.querySelectorAll("#sTabs .tab"), function (btn) {
-    btn.addEventListener("click", function () {
-      state.sFilter = btn.dataset.stab;
-      Array.prototype.forEach.call(document.querySelectorAll("#sTabs .tab"), function (b) { b.classList.toggle("active", b === btn); });
-      renderSamples();
-    });
-  });
-  document.getElementById("sSearch").addEventListener("input", function (e) { state.sSearch = e.target.value; renderSamples(); });
   document.getElementById("auditSearch").addEventListener("input", function (e) { state.auditSearch = e.target.value; renderAudit(); });
   document.getElementById("auditWazuhOnly").addEventListener("click", function () {
     state.auditWazuhOnly = !state.auditWazuhOnly;
@@ -1964,20 +1939,26 @@
     renderQuarantine();
     renderAudit();
   }
-  renderAll();
-  renderSamples();  // real agent reports — static, render once (not part of the live loop)
+  renderAll();   // first paint with empty state — real data lands via loadFeed() below
+  // Waits for the auth-gate's current-user fetch (top of <body>) so
+  // renderPolicyPanel()/renderFeed() etc. know the real role before
+  // deciding what's interactive — avoids racing an unresolved fetch.
+  window.__SEG_AUTH_READY__.then(function () {
+    return Promise.all([loadPolicy(), loadFeed(), loadOrg()]);
+  }).then(function () {
+    renderPolicyPanel();
+    lastUpdate = Date.now();
+  }).catch(function () { /* redirect already in flight, or a load failed — surfaced via empty states */ });
 
-  function scheduleNext() {
-    var delay = 3800 + Math.random() * 4200;
+  // Periodic real refresh (not a fake random-arrival generator) — picks up
+  // any spool changes made by other admins/analysts, or a re-run of
+  // samples/ if the corpus changed on disk.
+  function scheduleRefresh() {
     setTimeout(function () {
-      var e = makeEmail(Date.now());
-      ingest(e);
-      lastUpdate = Date.now();
-      renderAll();
-      scheduleNext();
-    }, delay);
+      loadFeed().then(function () { lastUpdate = Date.now(); }).finally(scheduleRefresh);
+    }, 60000);
   }
-  scheduleNext();
+  scheduleRefresh();
 
   setInterval(function () {
     document.getElementById("liveLabel").textContent = "Live · updated " + fmtAgo(lastUpdate);

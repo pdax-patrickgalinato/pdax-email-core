@@ -61,14 +61,14 @@ code never changes when you go live. That is the whole point: this core is
 already implemented in `pipeline/content_ai.py`, sharing one prompt/schema so
 behavior is consistent across backends. All off by default — `run_pipeline()`
 picks the content provider via `content_ai.get_default_provider()`, which
-reads `PDAX_CONTENT_PROVIDER` (`heuristic` default / `bedrock` / `gemini` /
+reads `SEG_CONTENT_PROVIDER` (`heuristic` default / `bedrock` / `gemini` /
 `glm` / `null`).
 
 **Bedrock:**
 ```bash
-export PDAX_CONTENT_PROVIDER=bedrock
+export SEG_CONTENT_PROVIDER=bedrock
 export AWS_REGION=ap-southeast-1          # default if unset
-export PDAX_BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0   # default if unset
+export SEG_BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0   # default if unset
 pip install boto3                          # optional dep, only needed for this provider
 ```
 You need to **request model access for the chosen model in the Bedrock
@@ -77,9 +77,9 @@ account/region) — verify which Claude model IDs are actually enabled there.
 
 **Gemini (Google AI Studio):**
 ```bash
-export PDAX_CONTENT_PROVIDER=gemini
-export PDAX_GEMINI_API_KEY=...            # or GEMINI_API_KEY — the SDK's own default env var
-export PDAX_GEMINI_MODEL_ID=gemini-flash-latest   # default if unset — an alias, not a pinned version (pinned 2.5-flash/-pro both got retired within months; the "-latest" alias avoids re-hitting this)
+export SEG_CONTENT_PROVIDER=gemini
+export SEG_GEMINI_API_KEY=...            # or GEMINI_API_KEY — the SDK's own default env var
+export SEG_GEMINI_MODEL_ID=gemini-flash-latest   # default if unset — an alias, not a pinned version (pinned 2.5-flash/-pro both got retired within months; the "-latest" alias avoids re-hitting this)
 pip install google-genai                   # optional dep, only needed for this provider
 ```
 **Data-residency flag — do not skip:** this is the Google AI Studio developer
@@ -94,9 +94,9 @@ plain API key is what's implemented today.
 
 **GLM (via Vertex AI Model Garden MaaS):**
 ```bash
-export PDAX_CONTENT_PROVIDER=glm
-export PDAX_GLM_CREDENTIALS_PATH=/path/to/credentials.json   # a GCP service-account key (see below) — project_id is read from it automatically
-export PDAX_GLM_MODEL_ID=zai-org/glm-4.7-maas   # default if unset — verify what's actually enabled in your Model Garden console; GLM-5/5.1 exist too
+export SEG_CONTENT_PROVIDER=glm
+export SEG_GLM_CREDENTIALS_PATH=/path/to/credentials.json   # a GCP service-account key (see below) — project_id is read from it automatically
+export SEG_GLM_MODEL_ID=zai-org/glm-4.7-maas   # default if unset — verify what's actually enabled in your Model Garden console; GLM-5/5.1 exist too
 pip install openai google-auth              # optional deps — OpenAI-compatible client + service-account token refresh
 ```
 Chosen specifically to escape Google AI Studio's free-tier rate limits, not
@@ -111,7 +111,7 @@ real endpoint on 2026-08-04, not just cosmetic:
   served through Google's infrastructure, that's a distinct data-governance
   question from Google's own first-party Gemini model. Get this explicitly
   signed off, the same as the AI Studio decision was.
-- **Credentials — RESOLVED:** `PDAX_GLM_CREDENTIALS_PATH` (or the standard
+- **Credentials — RESOLVED:** `SEG_GLM_CREDENTIALS_PATH` (or the standard
   `GOOGLE_APPLICATION_CREDENTIALS`) points at a GCP **service-account JSON
   key** (`gcloud iam service-accounts keys create`, or downloaded from the
   IAM console — `"type": "service_account"` in the file). That key itself
@@ -119,7 +119,7 @@ real endpoint on 2026-08-04, not just cosmetic:
   access token from it via `google-auth` and auto-refreshes before every
   call (`_ServiceAccountTokenProvider`, passed to `OpenAI(api_key=...)`,
   which accepts `str | Callable[[], str]`) — safe for a long-running
-  gateway process, not just a one-shot script. A fixed `PDAX_GLM_API_KEY`
+  gateway process, not just a one-shot script. A fixed `SEG_GLM_API_KEY`
   string still works and takes precedence if set, for a backend that hands
   out a stable key instead of a service account.
 - **Token budget:** confirmed live that `zai-org/glm-4.7-maas` is a
@@ -145,18 +145,18 @@ real endpoint on 2026-08-04, not just cosmetic:
 - Model output only ever becomes `(score, findings, facts)`; `verdict.py` still
   owns every scoring decision, same guarantee as `HeuristicProvider`.
 
-## Controlling AI-call volume at production scale (`PDAX_LLM_TRIAGE`)
+## Controlling AI-call volume at production scale (`SEG_LLM_TRIAGE`)
 
 Analyzing every single email with a paid/rate-limited AI provider doesn't
 scale — most real mail is decisively clean or decisively bad from the free
 stages alone (headers/sender/urls/attachments/intel + the regex
 `HeuristicProvider`) and doesn't need an LLM call to confirm that. Set
-`PDAX_LLM_TRIAGE=1` (default off) to make `run_pipeline()` cascade instead of
+`SEG_LLM_TRIAGE=1` (default off) to make `run_pipeline()` cascade instead of
 always calling the configured LLM provider:
 
 1. Every email gets a free heuristic-only content pass first.
 2. If that already produced a hard override, or the composite score isn't
-   within `PDAX_LLM_TRIAGE_MARGIN` points (default 15) of the LOW/MALICIOUS
+   within `SEG_LLM_TRIAGE_MARGIN` points (default 15) of the LOW/MALICIOUS
    thresholds, the heuristic result is kept as final — **no LLM call spent.**
 3. Otherwise (the genuinely ambiguous middle), the real provider
    (`BedrockProvider`/`GeminiProvider`) is called and its result replaces the
@@ -215,7 +215,7 @@ tests/
    `run_eval.py` hits the Annex B targets.
 2. ~~Implement `VertexProvider` and drop it in~~ — done as `BedrockProvider`
    (Claude on AWS Bedrock, ap-southeast-1); request model access in the
-   Bedrock console, set `PDAX_CONTENT_PROVIDER=bedrock`, then re-run
+   Bedrock console, set `SEG_CONTENT_PROVIDER=bedrock`, then re-run
    `run_eval.py` to confirm it beats the heuristic baseline before enabling.
 3. Implement the real `IntelClient` (VirusTotal/AbuseIPDB via Bantay SOC) in
    `pipeline/intel.py` — currently still `LocalIOCClient`.

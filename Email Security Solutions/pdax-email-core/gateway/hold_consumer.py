@@ -5,20 +5,20 @@ Reads held .eml files, runs `run_pipeline(..., source="smtp_hold")`, then
 applies an EnforcementClient. Quarantined / blocked mail is kept under
 `gateway/spool/` so analysts can re-evaluate later.
 
-Spool layout (PDAX_QUARANTINE_ROOT, default gateway/spool):
+Spool layout (SEG_QUARANTINE_ROOT, default gateway/spool):
   quarantine/<id>/message.eml + meta.json   ← held for review
   rejected/<id>/...                         ← confirmed blocked
   released/<id>/...                         ← delivered / false-positive release
   shadow_logs/shadow_enforcement.jsonl      ← shadow-mode audit
 
-Enforce modes (PDAX_ENFORCE):
+Enforce modes (SEG_ENFORCE):
   shadow      (default) — log intended disposition; always "release"
   quarantine  — write SUSPICIOUS/MALICIOUS to spool/quarantine/
   reject      — as quarantine; REJECT only if disposition.yaml allows it
 
 Usage:
   python3 gateway/hold_consumer.py path/to/held.eml
-  PDAX_ENFORCE=quarantine python3 gateway/hold_consumer.py samples/
+  SEG_ENFORCE=quarantine python3 gateway/hold_consumer.py samples/
   python3 gateway/hold_consumer.py --list
   python3 gateway/hold_consumer.py --reeval <queue_id>
   python3 gateway/hold_consumer.py --reeval-all --auto-release
@@ -112,14 +112,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="SEG hold consumer — quarantine/block spool + re-evaluation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Spool root: gateway/spool/ (override with --spool or PDAX_QUARANTINE_ROOT)",
+        epilog="Spool root: gateway/spool/ (override with --spool or SEG_QUARANTINE_ROOT)",
     )
     ap.add_argument("path", nargs="?", default=None,
                     help=".eml file or directory of held messages")
     ap.add_argument("--spool", default=str(_ROOT / "gateway" / "spool"),
                     help="quarantine/release root (default: gateway/spool)")
     ap.add_argument("--enforce", default=None,
-                    help="shadow|quarantine|reject (default: PDAX_ENFORCE or shadow)")
+                    help="shadow|quarantine|reject (default: SEG_ENFORCE or shadow)")
     ap.add_argument("--jsonl", action="store_true",
                     help="print one audit JSONL record per message instead of text")
     ap.add_argument("--list", action="store_true",
@@ -142,7 +142,7 @@ def main(argv=None) -> int:
     spool = Path(args.spool)
     if args.enforce:
         import os
-        os.environ["PDAX_ENFORCE"] = args.enforce
+        os.environ["SEG_ENFORCE"] = args.enforce
 
     if args.list:
         return _print_list(spool)

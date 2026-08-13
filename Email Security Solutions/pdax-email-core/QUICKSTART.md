@@ -117,7 +117,7 @@ python3 analyze.py samples/bec_giftcard.eml     # should say MALICIOUS
 | `MALICIOUS` | Confident this is an attack | `QUARANTINE` (+ IOC block later); `REJECT` only when explicitly enabled |
 
 Policy lives in `rules/disposition.yaml`. Default enforce mode is **shadow**
-(`PDAX_ENFORCE=shadow`) — the hold consumer logs what it *would* do and still
+(`SEG_ENFORCE=shadow`) — the hold consumer logs what it *would* do and still
 releases mail. See `gateway/README.md`.
 
 **HARD OVERRIDE** (only appears sometimes) means one check was so conclusive

@@ -1,10 +1,15 @@
 """Stage 2 — Sender verification.
 
 Offline-capable: lookalike detection (homoglyph fold + bounded edit distance),
-VIP display-name spoof, free-mail-claiming-corporate. Domain age / RDAP and
-first-contact history are enrichment hooks (marked degraded when not wired)."""
+VIP display-name spoof, free-mail-claiming-corporate. Domain age (RDAP,
+app/rdap_client.py — Web Reputation, TMES policy parity) is wired but off by
+default (SEG_RDAP_LOOKUP=1 to enable — a live network call per email, so it
+follows the same "gate behind a flag, keep the offline default" posture as
+every other real enrichment provider in this codebase). First-contact
+history remains an unwired hook."""
 from __future__ import annotations
 
+import os
 import re
 
 import time
@@ -12,6 +17,13 @@ import time
 from ..models import StageResult, StageStatus
 from ..parsed_email import ParsedEmail
 from ..domainutils import registrable_domain, normalize_confusables, levenshtein
+from ..rdap_client import domain_age_days as _rdap_domain_age_days
+
+# Below this many days since RDAP registration, a domain counts as "newly
+# registered" — an established phishing-infrastructure signal on its own,
+# not proof (a legitimate new vendor/product launch looks identical), so
+# this stays a small weighted addition, never a hard override.
+_DOMAIN_AGE_LOW_DAYS = 30
 
 FREEMAIL = {
     "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "proton.me",
@@ -39,7 +51,8 @@ BRAND_DOMAINS = {
 }
 
 
-def run(pe: ParsedEmail, protected_domains: list[str], vip_names: list[str]) -> StageResult:
+def run(pe: ParsedEmail, protected_domains: list[str], vip_names: list[str],
+        rdap_lookup=None) -> StageResult:
     t0 = time.perf_counter()
     flags: list[str] = []
     score = 0.0
@@ -105,10 +118,21 @@ def run(pe: ParsedEmail, protected_domains: list[str], vip_names: list[str]) -> 
         flags.append("freemail_corporate_persona")
         score += 20
 
-    # Enrichment hooks (not wired in the offline core)
+    # RDAP domain-age lookup (Web Reputation). Off by default — an explicit
+    # rdap_lookup= callable always wins (tests inject a fake here); absent
+    # that, only fires when SEG_RDAP_LOOKUP=1 is set, same "offline unless
+    # explicitly turned on" posture as every other live-network provider.
+    if rdap_lookup is None and os.environ.get("SEG_RDAP_LOOKUP", "").strip().lower() in ("1", "true", "yes"):
+        rdap_lookup = _rdap_domain_age_days
+    age_days = rdap_lookup(from_dom) if rdap_lookup else None
+    if age_days is not None and age_days < _DOMAIN_AGE_LOW_DAYS:
+        flags.append(f"domain_age_low:{age_days}")
+        score += 25
+
+    # Enrichment hooks
     status = StageStatus.OK
-    facts["domain_age_days"] = None          # RDAP hook
-    facts["first_contact"] = None            # sender-history hook
+    facts["domain_age_days"] = age_days
+    facts["first_contact"] = None            # sender-history hook, still unwired
     if facts["domain_age_days"] is None and facts["first_contact"] is None:
         status = StageStatus.DEGRADED        # honest: enrichment unavailable
 

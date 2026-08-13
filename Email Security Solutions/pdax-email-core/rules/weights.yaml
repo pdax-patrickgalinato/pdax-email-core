@@ -14,3 +14,14 @@ thresholds:
   malicious: 70
   suspicious: 45
   low: 20
+
+# app/attachment_forensics.py's static_severity -> points added to the
+# attachments stage's sub_score (Malware Scanning, TMES policy parity).
+# CRITICAL isn't emitted by _severity() today (max is HIGH) — kept for
+# forward compatibility, not currently reachable.
+forensics_severity_points:
+  NONE: 0
+  LOW: 10
+  MEDIUM: 30
+  HIGH: 60
+  CRITICAL: 85

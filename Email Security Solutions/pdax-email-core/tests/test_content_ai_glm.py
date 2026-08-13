@@ -116,7 +116,7 @@ def test_missing_project_id_degrades_without_client_injection():
     # No injected client and no project id -> _get_client() raises before any
     # network call; analyze() must still degrade honestly, not crash.
     import os
-    old = os.environ.pop("PDAX_GLM_PROJECT_ID", None)
+    old = os.environ.pop("SEG_GLM_PROJECT_ID", None)
     try:
         provider = GLMProvider(project_id="")
         score, findings, facts = provider.analyze("x", "y", {})
@@ -124,7 +124,7 @@ def test_missing_project_id_degrades_without_client_injection():
         assert facts["degraded"] is True
     finally:
         if old is not None:
-            os.environ["PDAX_GLM_PROJECT_ID"] = old
+            os.environ["SEG_GLM_PROJECT_ID"] = old
 
 
 def _write_fake_credentials_file(payload):
@@ -138,13 +138,13 @@ def _write_fake_credentials_file(payload):
 def test_project_id_derived_from_credentials_file():
     import os
     path = _write_fake_credentials_file({"type": "service_account", "project_id": "derived-proj"})
-    old = os.environ.pop("PDAX_GLM_PROJECT_ID", None)
+    old = os.environ.pop("SEG_GLM_PROJECT_ID", None)
     try:
         provider = GLMProvider(credentials_path=path)
         assert provider.project_id == "derived-proj"
     finally:
         if old is not None:
-            os.environ["PDAX_GLM_PROJECT_ID"] = old
+            os.environ["SEG_GLM_PROJECT_ID"] = old
         os.unlink(path)
 
 
@@ -180,7 +180,7 @@ def test_resolve_api_key_falls_back_to_service_account_token_provider():
 def test_resolve_api_key_none_without_any_credentials():
     import os
     saved = {k: os.environ.pop(k, None) for k in
-              ("PDAX_GLM_API_KEY", "PDAX_GLM_CREDENTIALS_PATH", "GOOGLE_APPLICATION_CREDENTIALS")}
+              ("SEG_GLM_API_KEY", "SEG_GLM_CREDENTIALS_PATH", "GOOGLE_APPLICATION_CREDENTIALS")}
     try:
         provider = GLMProvider(project_id="p")
         assert provider._resolve_api_key() is None
@@ -221,15 +221,15 @@ def test_service_account_token_provider_refreshes_when_expired():
 
 def test_get_default_provider_respects_env():
     import os
-    old = os.environ.get("PDAX_CONTENT_PROVIDER")
+    old = os.environ.get("SEG_CONTENT_PROVIDER")
     try:
-        os.environ["PDAX_CONTENT_PROVIDER"] = "glm"
+        os.environ["SEG_CONTENT_PROVIDER"] = "glm"
         assert isinstance(get_default_provider(), GLMProvider)
     finally:
         if old is None:
-            os.environ.pop("PDAX_CONTENT_PROVIDER", None)
+            os.environ.pop("SEG_CONTENT_PROVIDER", None)
         else:
-            os.environ["PDAX_CONTENT_PROVIDER"] = old
+            os.environ["SEG_CONTENT_PROVIDER"] = old
 
 
 if __name__ == "__main__":

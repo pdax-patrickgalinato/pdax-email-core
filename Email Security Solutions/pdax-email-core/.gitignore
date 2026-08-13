@@ -14,3 +14,8 @@ gateway/spool/released/
 gateway/spool/rejected/
 gateway/spool/shadow_logs/
 gateway/spool/hold/
+
+# Local runtime state — intel cache + verdict-history correlation store
+# (app/pipeline/intel.py, app/pipeline/correlation.py). Regenerated locally,
+# never shared/committed.
+data/

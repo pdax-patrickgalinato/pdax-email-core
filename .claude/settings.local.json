@@ -44,7 +44,27 @@
       "Bash(node scripts/validate_palette.js \"#0ca30c,#fab219,#ec835a,#d03b3b\" --mode light --surface \"#fcfcfb\")",
       "Bash(node --check _extracted.js)",
       "Bash(rm _extracted.js)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"exit2: $?\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(command -v brew)",
+      "Bash(brew --version)",
+      "Bash(brew install *)",
+      "Bash(cat /Users/administrator/.config/gh/hosts.yml 2>&1)",
+      "Bash(gh repo *)",
+      "Skill(schedule)",
+      "Skill(schedule:*)",
+      "Bash(git checkout *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --head chore/update-local-permissions --title 'Update local Claude Code permission allowlist' --body ' *)",
+      "Bash(git tag *)",
+      "Bash(mkdir -p \"/Users/ronald.galinato/Documents/Cybersecurity-Pat-backups\")",
+      "Bash(tar --exclude=.venv --exclude=__pycache__ --exclude=*.pyc --exclude=.DS_Store -czf /Users/ronald.galinato/Documents/Cybersecurity-Pat-backups/pdax-email-core-backup-__CMDSUB_OUTPUT__.tar.gz pdax-email-core)",
+      "Bash(tar -tzf \"/Users/ronald.galinato/Documents/Cybersecurity-Pat-backups/pdax-email-core-backup-20260813-111926.tar.gz\")"
     ]
   }
 }

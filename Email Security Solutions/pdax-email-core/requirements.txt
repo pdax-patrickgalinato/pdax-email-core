@@ -2,13 +2,34 @@
 pydantic>=2.0
 PyYAML>=6.0
 
+# --- Local web backend (dashboard server: server/) ---
+# A genuine new dependency, unlike everything below this line — every other
+# enrichment provider in this repo is optional/stdlib-only because it's an
+# opt-in network call behind a flag; this is the delivery mechanism for the
+# whole dashboard UI (policy toggles, RBAC login, real-data feed), not an
+# enrichment provider, so it's a hard dependency once you want the dashboard.
+# The CLI (analyze.py) and the pipeline core (app/) need none of this.
+fastapi>=0.115
+uvicorn>=0.30
+httpx>=0.27   # required by starlette.testclient.TestClient for server/ tests only
+
 # Enrichment providers (only needed when you wire the real stages):
-# boto3                     # Stage 5 BedrockProvider (Claude, ap-southeast-1) — set PDAX_CONTENT_PROVIDER=bedrock
-# google-genai               # Stage 5 GeminiProvider (Google AI Studio) — set PDAX_CONTENT_PROVIDER=gemini
+# boto3                     # Stage 5 BedrockProvider (Claude, ap-southeast-1) — set SEG_CONTENT_PROVIDER=bedrock
+# google-genai               # Stage 5 GeminiProvider (Google AI Studio) — set SEG_CONTENT_PROVIDER=gemini
 #                             # NOTE: no region pinning, needs DPO sign-off under RA 10173 before real mail (see content_ai.py)
-# openai                     # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI Model Garden MaaS) — set PDAX_CONTENT_PROVIDER=glm
+# openai                     # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI Model Garden MaaS) — set SEG_CONTENT_PROVIDER=glm
 #                             # NOTE: endpoint is locations/global (region-pinning unconfirmed) + third-party model provenance — see content_ai.py
-# google-auth                 # only if authenticating GLMProvider via a service-account credentials.json (PDAX_GLM_CREDENTIALS_PATH/GOOGLE_APPLICATION_CREDENTIALS) instead of a fixed PDAX_GLM_API_KEY
-# vt-py                     # Stage 7 VirusTotal client
+#                             # Also shared by OllamaProvider (local, self-hosted, via Ollama's own
+#                             # OpenAI-compatible API) — set SEG_CONTENT_PROVIDER=ollama,
+#                             # SEG_OLLAMA_MODEL_ID=<a model already `ollama pull`-ed>. No data-residency
+#                             # question (nothing leaves the organization's infrastructure) and no per-call cost —
+#                             # the recommended default once hardware is provisioned for it (unresolved
+#                             # as of this writing). Requires a separate local Ollama install
+#                             # (https://ollama.com), not a Python package.
+# google-auth                 # only if authenticating GLMProvider via a service-account credentials.json (SEG_GLM_CREDENTIALS_PATH/GOOGLE_APPLICATION_CREDENTIALS) instead of a fixed SEG_GLM_API_KEY
+# Stage 7 VTAbuseIPDBIntelClient (VirusTotal + AbuseIPDB free-tier REST APIs)
+# needs no extra dependency — stdlib urllib/sqlite3/json only, by design
+# (keeps this "standalone," no vt-py or other SDK). Set SEG_INTEL_CLIENT=vt_abuseipdb
+# plus SEG_VT_API_KEY / SEG_ABUSEIPDB_API_KEY (either or both).
 # httpx                     # Stage 3 live redirect-follow / cert inspection
 # dnstwist                  # gateway map_writer permutation generation

@@ -361,11 +361,24 @@ merge it in.
 
 ```bash
 source .venv/bin/activate
-python3 tests/test_core.py                 # unit tests
-python3 tests/test_content_ai_bedrock.py   # BedrockProvider tests (mocked)
+for f in tests/test_core.py tests/test_policy.py tests/test_disposition.py \
+         tests/test_forensics.py tests/test_playbook.py tests/test_llm_triage.py \
+         tests/test_content_ai_bedrock.py tests/test_content_ai_gemini.py \
+         tests/test_content_ai_glm.py tests/test_content_ai_ollama.py \
+         tests/test_content_ai_context.py tests/test_attachments_wiring.py \
+         tests/test_intel_correlation.py tests/test_intel_vt_abuseipdb.py \
+         tests/test_headers_bulk.py tests/test_rdap.py tests/test_sandbox.py \
+         tests/test_server_foundation.py tests/test_server_auth.py \
+         tests/test_server_policy_api.py tests/test_server_feed_api.py \
+         tests/test_org_config.py; do
+  python3 "$f" || echo "FAILED: $f"
+done
 python3 tests/run_eval.py samples/         # FP=0, ideally FN=0
 python3 -c "import ast,pathlib;[ast.parse(p.read_text(),feature_version=(3,9)) for p in pathlib.Path('.').rglob('*.py') if '.venv' not in str(p)]"  # 3.9-safe
 ```
+
+See `CLAUDE.md` for the current list (this file's own list can drift — treat
+`CLAUDE.md` as the source of truth if the two ever disagree).
 
 ## First thing to do in a new session
 

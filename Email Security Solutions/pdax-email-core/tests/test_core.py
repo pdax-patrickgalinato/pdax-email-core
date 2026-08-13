@@ -26,7 +26,11 @@ def test_levenshtein_cap():
 
 
 def _verdict(name):
-    raw = (Path(__file__).resolve().parents[1] / "samples" / name).read_bytes()
+    # Synthetic fixtures (not real captured mail) purpose-built to exercise
+    # specific hard-override code paths deterministically — see
+    # samples/fixtures/ and samples/labels.yaml for why these are split from
+    # the real-mail corpus that tests/run_eval.py evaluates.
+    raw = (Path(__file__).resolve().parents[1] / "samples" / "fixtures" / name).read_bytes()
     return run_pipeline(raw, source="test").verdict.value
 
 

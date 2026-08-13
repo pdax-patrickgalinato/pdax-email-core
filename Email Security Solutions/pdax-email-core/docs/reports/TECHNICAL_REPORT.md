@@ -108,7 +108,7 @@ class ContentProvider(Protocol):
 ### 5.1 Real content-AI providers (`app/pipeline/content_ai.py`)
 
 Two production `ContentProvider` implementations, both **off by default**
-(gated behind `PDAX_CONTENT_PROVIDER=bedrock|gemini`, default `heuristic`),
+(gated behind `SEG_CONTENT_PROVIDER=bedrock|gemini`, default `heuristic`),
 sharing one system prompt and one pydantic output schema so behavior is
 consistent regardless of backend:
 

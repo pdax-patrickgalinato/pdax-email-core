@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from ..models import IOCSet, PipelineResult, StageResult, Verdict
+from . import policy
 
 _URL_HOST = re.compile(r"^https?://([^/]+)", re.I)
 
@@ -53,6 +54,9 @@ def extract_iocs(pe, stages: list[StageResult]) -> IOCSet:
         for a in att_stage.facts.get("attachments", []):
             if a.get("sha256"):
                 ioc.hashes_sha256.append(a["sha256"])
+        # URLs found inside a PDF/HTML attachment (app/attachment_forensics.py)
+        # — pivotable the same way a URL in the email body is.
+        ioc.urls.extend(att_stage.facts.get("embedded_urls", []))
 
     # dedupe
     ioc.sender_emails = sorted(set(ioc.sender_emails))
@@ -64,34 +68,65 @@ def extract_iocs(pe, stages: list[StageResult]) -> IOCSet:
     return ioc
 
 
-def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict) -> None:
+def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict,
+                      policy_cfg: dict = None) -> None:
     result.thresholds = dict(thresholds)   # carried through so reports can show margin-to-next-verdict
     stage_by_name = {s.stage: s for s in result.stages}
+    suppressed_all: list = []
 
     # --- hard overrides (bypass weighted scoring) -----------------------
+    # Correlated Intelligence — only a real external hit (VirusTotal/
+    # AbuseIPDB/LocalIOCClient, "intel_"-prefixed) is a hard override. A
+    # correlation_seen_before hit (this pipeline's own verdict history,
+    # app/pipeline/correlation.py) is deliberately weighted-only — "PDAX
+    # flagged this before" is lower-confidence than "known bad externally,"
+    # so it's excluded here on purpose, not an oversight.
     intel = stage_by_name.get("intel")
-    if intel and intel.red_flags:
+    if (intel and any(f.startswith("intel_") for f in intel.red_flags)
+            and policy.is_enabled(policy_cfg, "correlated_intelligence")):
         result.hard_override = "threat_intel_hit"
         result.verdict = Verdict.MALICIOUS
         result.composite_score = 100.0
-        result.reasons = intel.red_flags[:]
+        result.reasons = [f for f in intel.red_flags if f.startswith("intel_")]
         return
 
+    # Web Reputation
     urls = stage_by_name.get("urls")
     atts = stage_by_name.get("attachments")
-    if urls and any(f.startswith("url_lookalike") for f in urls.red_flags):
+    if (urls and any(f.startswith("url_lookalike") for f in urls.red_flags)
+            and policy.is_enabled(policy_cfg, "web_reputation")):
         result.hard_override = "url_lookalike_domain"
         result.verdict = Verdict.MALICIOUS
         result.composite_score = 95.0
         result.reasons = [f for f in urls.red_flags if f.startswith("url_lookalike")]
         return
-    if atts and any(f.startswith("banned_attachment") for f in atts.red_flags):
+    # File Blocking
+    if (atts and any(f.startswith("banned_attachment") for f in atts.red_flags)
+            and policy.is_enabled(policy_cfg, "file_blocking")):
         result.hard_override = "banned_attachment_type"
         result.verdict = Verdict.MALICIOUS
         result.composite_score = 95.0
         result.reasons = [f for f in atts.red_flags if f.startswith("banned_attachment")]
         return
+    # File Blocking: a renamed/spoofed executable (declared extension doesn't
+    # match the actual magic bytes, or a double-extension shape like
+    # invoice.pdf.exe) is invisible to the banned_attachment override above
+    # since that one only keys off the *declared* extension — this closes
+    # that gap using app/attachment_forensics.py's findings (wired in by
+    # attachments.py, Phase 1/2 of the TMES policy-parity plan).
+    if (atts and any(f.startswith("spoofed_attachment_type") or f.startswith("double_extension_executable")
+                      for f in atts.red_flags)
+            and policy.is_enabled(policy_cfg, "file_blocking")):
+        result.hard_override = "spoofed_or_double_extension_attachment"
+        result.verdict = Verdict.MALICIOUS
+        result.composite_score = 95.0
+        result.reasons = [f for f in atts.red_flags
+                          if f.startswith("spoofed_attachment_type") or f.startswith("double_extension_executable")]
+        return
 
+    # Sender lookalike and BEC+VIP impersonation are sender-identity/content
+    # signals, not owned by any of the 6 TMES categories (see policy.py's
+    # module docstring) — always on, never gated by policy_cfg.
     sender = stage_by_name.get("sender")
     if sender and any(f.startswith("lookalike_of") for f in sender.red_flags):
         result.hard_override = "sender_lookalike_domain"
@@ -116,14 +151,29 @@ def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict) -
     # max-plus blend: dominant signal + damped contribution of the rest, so
     # several independent weak-to-moderate signals reinforce instead of being
     # averaged toward zero by the stages that (legitimately) found nothing.
+    #
+    # Policy gating here is stage-level, not per-flag: if every one of a
+    # stage's red_flags belongs to a disabled category (i.e. nothing "ungated"
+    # or enabled-category survives the filter), that stage contributes 0 —
+    # same as if it had legitimately found nothing. A stage that mixes a
+    # disabled-category flag with an active one (e.g. attachments.py mixing
+    # file_blocking + malware_scanning findings) keeps its full sub_score
+    # conservatively rather than guessing a per-flag point split; Phases 1/2
+    # add real per-category score decomposition to attachments.py once there
+    # are enough distinct malware_scanning findings to make that split
+    # meaningful (see the TMES policy-parity plan).
     all_flags: list[str] = []
     contributions: list[float] = []
     for name, w in weights.items():
         st = stage_by_name.get(name)
         if not st:
             continue
+        active, suppressed = policy.filter_flags(st.red_flags, policy_cfg)
+        suppressed_all.extend(suppressed)
+        if st.red_flags and not active:
+            continue   # everything this stage found belongs to a disabled category
         contributions.append((st.sub_score / 100.0) * (w / max(weights.values())) * 100.0)
-        all_flags.extend(st.red_flags)
+        all_flags.extend(active)
 
     contributions.sort(reverse=True)
     if contributions:
@@ -133,7 +183,12 @@ def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict) -
     else:
         composite = 0.0
     result.composite_score = composite
-    result.reasons = sorted(set(all_flags))
+    # Suppressed-by-disabled-category flags stay visible (tagged) rather than
+    # silently vanishing — an analyst reading the report should be able to
+    # see what a disabled policy category *would* have caught. See
+    # rules/policy.yaml and app/pipeline/policy.py.
+    result.reasons = sorted(set(all_flags)) + sorted(
+        f"policy_suppressed:{f}" for f in set(suppressed_all))
 
     if composite >= thresholds["malicious"]:
         result.verdict = Verdict.MALICIOUS

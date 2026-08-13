@@ -30,7 +30,7 @@ def _result(verdict=Verdict.CLEAN, hard_override=None, errored=False) -> Pipelin
 
 
 def test_resolve_enforce_mode_defaults_shadow():
-    os.environ.pop("PDAX_ENFORCE", None)
+    os.environ.pop("SEG_ENFORCE", None)
     assert resolve_enforce_mode() == EnforceMode.SHADOW
     assert resolve_enforce_mode("quarantine") == EnforceMode.QUARANTINE
     assert resolve_enforce_mode("reject") == EnforceMode.REJECT
@@ -152,7 +152,7 @@ def test_reeval_keeps_history_and_can_keep_blocked():
 
 
 if __name__ == "__main__":
-    os.environ.pop("PDAX_ENFORCE", None)
+    os.environ.pop("SEG_ENFORCE", None)
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0
     for fn in fns:

@@ -58,12 +58,12 @@ with it).
   model provenance distinct from Google's own Gemini — still flagged, don't
   assume resolved**. Credential format *is* resolved as of 2026-08-04: a
   GCP service-account JSON key via `credentials_path`/
-  `PDAX_GLM_CREDENTIALS_PATH`, auto-refreshed by
+  `SEG_GLM_CREDENTIALS_PATH`, auto-refreshed by
   `_ServiceAccountTokenProvider` — confirmed working against the real
   endpoint, see the class docstring and HANDOFF.md's later 2026-08-04
   entry). All three LLM providers share one `_SYSTEM_PROMPT` and one
   `_ContentAnalysis` pydantic schema — tune the analysis approach in one
-  place, not per-provider. Selected via `PDAX_CONTENT_PROVIDER`
+  place, not per-provider. Selected via `SEG_CONTENT_PROVIDER`
   (`heuristic`/`bedrock`/`gemini`/`glm`/`null`), off by default.
 - `intel.IntelClient.check(domains, ips, urls, hashes) -> (hits, degraded)` —
   `LocalIOCClient` (offline default, checks a provided known-bad set). Real
@@ -75,12 +75,12 @@ Selection happens in `runner.run_pipeline()` via `content_provider=`/
 `content_ai.get_default_provider()` / a `LocalIOCClient()`. Never hardcode a
 provider choice elsewhere — route new call sites through these.
 
-**LLM-call volume control:** `PDAX_LLM_TRIAGE=1` makes `run_pipeline()`
+**LLM-call volume control:** `SEG_LLM_TRIAGE=1` makes `run_pipeline()`
 cascade instead of always calling the configured LLM provider — a free
 `HeuristicProvider` pass runs first, and the real provider is only called
 for the ambiguous middle (`_should_escalate()` in `runner.py`: skip if a
 hard override already fired, or the heuristic-only score isn't within
-`PDAX_LLM_TRIAGE_MARGIN` of the LOW/MALICIOUS thresholds). Off by default —
+`SEG_LLM_TRIAGE_MARGIN` of the LOW/MALICIOUS thresholds). Off by default —
 don't assume it's active. This exists because per-call AI providers (Google
 AI Studio free tier especially) can't sustain analyzing every production
 email; see HANDOFF.md's 2026-08-03 entry for the full reasoning and the
@@ -115,14 +115,26 @@ before calling any change done.
 
 ```bash
 source .venv/bin/activate
-python3 tests/test_core.py                 # unit tests
-python3 tests/test_content_ai_bedrock.py    # BedrockProvider tests (mocked, offline)
-python3 tests/test_content_ai_gemini.py     # GeminiProvider tests (mocked, offline)
-python3 tests/test_content_ai_glm.py        # GLMProvider tests (mocked, offline)
-python3 tests/test_llm_triage.py            # LLM-call cascade/volume-control tests (mocked, offline)
+for f in tests/test_core.py tests/test_policy.py tests/test_disposition.py \
+         tests/test_forensics.py tests/test_playbook.py tests/test_llm_triage.py \
+         tests/test_content_ai_bedrock.py tests/test_content_ai_gemini.py \
+         tests/test_content_ai_glm.py tests/test_content_ai_ollama.py \
+         tests/test_content_ai_context.py tests/test_attachments_wiring.py \
+         tests/test_intel_correlation.py tests/test_intel_vt_abuseipdb.py \
+         tests/test_headers_bulk.py tests/test_rdap.py tests/test_sandbox.py \
+         tests/test_server_foundation.py tests/test_server_auth.py \
+         tests/test_server_policy_api.py tests/test_server_feed_api.py \
+         tests/test_org_config.py; do
+  python3 "$f" || echo "FAILED: $f"
+done
 python3 tests/run_eval.py samples/          # precision/recall on the sample corpus — must stay FP=0
 python3 -c "import ast,pathlib;[ast.parse(p.read_text(),feature_version=(3,9)) for p in pathlib.Path('.').rglob('*.py') if '.venv' not in str(p)]"  # 3.9-safe
 ```
+
+(`tests/test_server_*.py` and `tests/test_org_config.py` are Part 2 —
+dashboard-overhaul phases 9-13 — added 2026-08-13. Server tests use FastAPI's
+`TestClient`/`httpx`, monkey-patch module-level globals to temp paths, never
+touch the real `data/`, `gateway/spool/`, or `rules/*.yaml`.)
 
 ## Conventions already established in this codebase
 

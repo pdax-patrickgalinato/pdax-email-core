@@ -80,24 +80,24 @@ def test_missing_tool_call_degrades():
 
 
 def test_get_default_provider_respects_env():
-    old = os.environ.get("PDAX_CONTENT_PROVIDER")
+    old = os.environ.get("SEG_CONTENT_PROVIDER")
     try:
-        os.environ.pop("PDAX_CONTENT_PROVIDER", None)
+        os.environ.pop("SEG_CONTENT_PROVIDER", None)
         assert isinstance(get_default_provider(), content_ai.HeuristicProvider)
 
-        os.environ["PDAX_CONTENT_PROVIDER"] = "bedrock"
+        os.environ["SEG_CONTENT_PROVIDER"] = "bedrock"
         assert isinstance(get_default_provider(), BedrockProvider)
 
-        os.environ["PDAX_CONTENT_PROVIDER"] = "gemini"
+        os.environ["SEG_CONTENT_PROVIDER"] = "gemini"
         assert isinstance(get_default_provider(), GeminiProvider)
 
-        os.environ["PDAX_CONTENT_PROVIDER"] = "null"
+        os.environ["SEG_CONTENT_PROVIDER"] = "null"
         assert isinstance(get_default_provider(), content_ai.NullProvider)
     finally:
         if old is None:
-            os.environ.pop("PDAX_CONTENT_PROVIDER", None)
+            os.environ.pop("SEG_CONTENT_PROVIDER", None)
         else:
-            os.environ["PDAX_CONTENT_PROVIDER"] = old
+            os.environ["SEG_CONTENT_PROVIDER"] = old
 
 
 if __name__ == "__main__":

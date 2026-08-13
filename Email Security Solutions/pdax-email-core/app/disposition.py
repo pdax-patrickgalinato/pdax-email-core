@@ -59,7 +59,7 @@ def load_disposition_policy(path: Optional[Path] = None) -> dict:
 
 def resolve_enforce_mode(explicit: Optional[str] = None) -> EnforceMode:
     raw = (explicit if explicit is not None
-           else os.environ.get("PDAX_ENFORCE", "shadow")).strip().lower()
+           else os.environ.get("SEG_ENFORCE", "shadow")).strip().lower()
     if raw in ("1", "true", "yes", "quarantine", "enforce"):
         return EnforceMode.QUARANTINE
     if raw in ("reject", "reject_malicious"):
@@ -120,7 +120,7 @@ def decide_disposition(result: PipelineResult,
             and mode == EnforceMode.REJECT
             and allow_reject):
         disposition = Disposition.REJECT
-        reason_bits.append("escalated to REJECT (PDAX_ENFORCE=reject + allow_reject_on_malicious)")
+        reason_bits.append("escalated to REJECT (SEG_ENFORCE=reject + allow_reject_on_malicious)")
 
     result.disposition = disposition
     result.disposition_reason = "; ".join(reason_bits)
@@ -252,7 +252,7 @@ def get_default_enforcement_client(
     """Factory used by the hold consumer. Offline CLI keeps Null/Shadow."""
     mode = enforce_mode or resolve_enforce_mode()
     root = quarantine_root or Path(os.environ.get(
-        "PDAX_QUARANTINE_ROOT", "gateway/spool"))
+        "SEG_QUARANTINE_ROOT", "gateway/spool"))
     if mode == EnforceMode.SHADOW:
         log_dir = root / "shadow_logs"
         return ShadowEnforcementClient(log_dir=log_dir)
@@ -371,7 +371,8 @@ def keep_blocked(quarantine_root: Path, queue_id: str,
 
 def reevaluate_spool_entry(quarantine_root: Path, queue_id: str,
                            auto_release: bool = False,
-                           auto_block: bool = False) -> dict:
+                           auto_block: bool = False,
+                           content_provider=None) -> dict:
     """Re-run run_pipeline on a stored message.eml and record the outcome.
 
     Does not move the message unless:
@@ -379,6 +380,11 @@ def reevaluate_spool_entry(quarantine_root: Path, queue_id: str,
       * auto_block and new disposition is QUARANTINE/REJECT → move to rejected/
 
     Always appends an entry to meta.json's reeval_history for audit.
+
+    content_provider=None (default) uses whatever SEG_CONTENT_PROVIDER/
+    SEG_CONTENT_PROVIDER configures — the CLI/gateway behavior, unchanged.
+    The dashboard server passes an explicit HeuristicProvider() here to
+    avoid a click in the UI triggering a paid Bedrock/Gemini/GLM call.
     """
     # Import here to avoid a circular import at module load (runner → disposition).
     from .pipeline.runner import run_pipeline
@@ -396,7 +402,7 @@ def reevaluate_spool_entry(quarantine_root: Path, queue_id: str,
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
 
     raw = eml_path.read_bytes()
-    result = run_pipeline(raw, source="smtp_hold")
+    result = run_pipeline(raw, source="smtp_hold", content_provider=content_provider)
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "previous_bucket": bucket,

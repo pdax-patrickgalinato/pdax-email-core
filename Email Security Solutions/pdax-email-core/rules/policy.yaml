@@ -1,0 +1,33 @@
+# Operational policy layer, mirroring Trend Micro Vision One Email Security
+# Module's "General" policy screen for TMES-admin parity. All 6 categories
+# default to enabled (matches the screenshot's default-all-checked state),
+# except virtual_analyzer — see app/pipeline/sandbox.py, no real detonation
+# capability exists behind that toggle yet, so it defaults off rather than
+# implying capability that isn't there.
+#
+# A disabled category does NOT stop its underlying stage from running — other
+# categories, and IOC extraction, may depend on the same stage's facts (e.g.
+# attachments.py feeds both malware_scanning and file_blocking; urls.py feeds
+# both web_reputation and intel's IOC candidate set). Instead, disabling a
+# category suppresses that category's specific flags from contributing to the
+# weighted composite and from firing their hard-override branch in
+# verdict.py — the flags are still computed and still visible in the
+# report/audit trail, tagged as policy-suppressed (see app/pipeline/policy.py
+# and the "policy_suppressed:" reason prefix). This mirrors the existing
+# EnforceMode.SHADOW precedent in app/disposition.py (compute the real
+# outcome, but don't act on it) rather than inventing a new suppression
+# concept.
+
+categories:
+  advanced_spam_protection:
+    enabled: true
+  malware_scanning:
+    enabled: true
+  file_blocking:
+    enabled: true
+  web_reputation:
+    enabled: true
+  virtual_analyzer:
+    enabled: false
+  correlated_intelligence:
+    enabled: true

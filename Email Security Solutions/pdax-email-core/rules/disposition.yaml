@@ -4,7 +4,7 @@
 # Verdict is owned exclusively by verdict.py. This file only maps that
 # verdict onto a gateway action. AI/providers never write disposition.
 #
-# Enforce modes (env PDAX_ENFORCE, default shadow):
+# Enforce modes (env SEG_ENFORCE, default shadow):
 #   shadow      — log the intended action; always release (safe default)
 #   quarantine  — actually quarantine QUARANTINE dispositions; never REJECT
 #   reject      — as quarantine, but MALICIOUS may become REJECT when
@@ -23,7 +23,7 @@ verdict_actions:
   SUSPICIOUS: QUARANTINE
   MALICIOUS: QUARANTINE
 
-# Only honored when PDAX_ENFORCE=reject. Keep false until shadow metrics
+# Only honored when SEG_ENFORCE=reject. Keep false until shadow metrics
 # prove the reject rule's false-positive rate is essentially zero.
 allow_reject_on_malicious: false
 

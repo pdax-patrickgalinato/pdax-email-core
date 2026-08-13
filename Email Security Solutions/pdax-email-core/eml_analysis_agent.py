@@ -469,8 +469,8 @@ def main():
     ap.add_argument("--credentials", default=str(Path(__file__).resolve().parent / "credentials.json"),
                      help="GCP service-account JSON key (default: credentials.json next to this script)")
     ap.add_argument("--project-id", default=None, help="default: read from --credentials")
-    ap.add_argument("--location", default=None, help="default: PDAX_GLM_LOCATION or 'global'")
-    ap.add_argument("--model", default=None, help="default: PDAX_GLM_MODEL_ID or zai-org/glm-4.7-maas")
+    ap.add_argument("--location", default=None, help="default: SEG_GLM_LOCATION or 'global'")
+    ap.add_argument("--model", default=None, help="default: SEG_GLM_MODEL_ID or zai-org/glm-4.7-maas")
     ap.add_argument("--max-tokens", type=int, default=6000,
                      help="GLM on Vertex is a reasoning model that spends tokens on hidden "
                           "chain-of-thought before its JSON answer — keep this generous "

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.pipeline.content_ai import GeminiProvider
 from app.pipeline.runner import run_pipeline
 
-SAMPLES = Path(__file__).resolve().parents[1] / "samples"
+SAMPLES = Path(__file__).resolve().parents[1] / "samples" / "fixtures"
 
 
 class CountingFakeClient:
@@ -98,18 +98,18 @@ def test_triage_on_escalates_ambiguous_case():
 
 
 def test_env_var_enables_triage_without_explicit_kwarg():
-    old = os.environ.get("PDAX_LLM_TRIAGE")
+    old = os.environ.get("SEG_LLM_TRIAGE")
     try:
-        os.environ["PDAX_LLM_TRIAGE"] = "1"
+        os.environ["SEG_LLM_TRIAGE"] = "1"
         client = CountingFakeClient()
         provider = GeminiProvider(client=client)
         _run("clean_normal.eml", content_provider=provider)  # no llm_triage kwarg
         assert len(client.calls) == 0
     finally:
         if old is None:
-            os.environ.pop("PDAX_LLM_TRIAGE", None)
+            os.environ.pop("SEG_LLM_TRIAGE", None)
         else:
-            os.environ["PDAX_LLM_TRIAGE"] = old
+            os.environ["SEG_LLM_TRIAGE"] = old
 
 
 if __name__ == "__main__":

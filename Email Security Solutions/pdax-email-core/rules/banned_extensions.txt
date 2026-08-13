@@ -1,0 +1,54 @@
+# File Blocking (TMES policy parity) — attachment extensions that hard-block
+# an email regardless of any other signal (see verdict.py's banned_attachment
+# hard override). Data, not code, per CLAUDE.md's convention — tune here, not
+# in app/pipeline/attachments.py.
+#
+# Union of the original pipeline's BANNED_EXT (18 extensions) and
+# app/attachment_forensics.py's broader EXECUTABLE_EXT (34 extensions) — the
+# original production blocklist was narrower than the static-forensics
+# module's own extension taxonomy, which already existed in this repo but
+# wasn't wired into the production block list until this file.
+#
+# Validate any addition against samples/labels.yaml's clean-labeled mail
+# before assuming it's safe — e.g. .reg/.inf could plausibly appear in
+# legitimate IT-support mail; none of today's clean samples carry one, but
+# re-check if that ever changes.
+ace
+apk
+application
+appx
+bat
+cab
+chm
+cmd
+com
+cpl
+dll
+exe
+gadget
+hlp
+hta
+img
+inf
+iso
+jar
+js
+jse
+lnk
+msi
+msp
+pif
+ps1
+psm1
+reg
+scf
+scr
+sct
+sys
+url
+vbe
+vbs
+vhd
+vhdx
+wsf
+wsh

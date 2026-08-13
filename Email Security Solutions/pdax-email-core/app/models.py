@@ -61,6 +61,12 @@ class HeaderFacts(BaseModel):
     return_path_mismatch: bool = False
     reply_to_divergent: bool = False
     message_id_domain: str = ""
+    # Advanced Spam Protection (TMES policy parity) — bulk-mail signals,
+    # distinct from the auth/spoofing facts above.
+    has_list_unsubscribe: bool = False
+    list_unsubscribe_one_click: bool = False   # RFC 8058
+    precedence_bulk: bool = False
+    has_list_id: bool = False
 
 
 class IOCSet(BaseModel):

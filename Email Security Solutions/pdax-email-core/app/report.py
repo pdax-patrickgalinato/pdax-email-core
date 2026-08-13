@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 
 from .models import PipelineResult, Verdict
+from .pipeline import policy as policy_mod
 
 _ICON = {Verdict.CLEAN: "🟢", Verdict.LOW: "🔵",
          Verdict.SUSPICIOUS: "🟠", Verdict.MALICIOUS: "🔴"}
@@ -49,10 +50,23 @@ _FLAG_DESCRIPTIONS = {
     "unusual_request": "An AI reviewer flagged this as an unusual or out-of-context request.",
     "prompt_injection_attempt": "The email body tried to instruct the AI reviewer directly (e.g. \"ignore previous instructions\") — the attempt itself was treated as a red flag, not followed.",
     "threat_intel_hit": "One of this email's domains/URLs/hashes matched a known-bad indicator in threat intelligence.",
-    "url_lookalike_domain": "A link's domain is a near-identical lookalike of one of PDAX's protected domains.",
+    "url_lookalike_domain": "A link's domain is a near-identical lookalike of one of the organization's protected domains.",
     "banned_attachment_type": "This email has an attachment of a file type that's outright banned (executables, scripts, etc.).",
-    "sender_lookalike_domain": "The sender's own domain is a near-identical lookalike of one of PDAX's protected domains.",
+    "sender_lookalike_domain": "The sender's own domain is a near-identical lookalike of one of the organization's protected domains.",
+    "spoofed_or_double_extension_attachment": "An attachment's real file type doesn't match its declared extension, or hides an executable behind a benign-looking one (e.g. invoice.pdf.exe) — a renamed/disguised file, invisible to a simple banned-extension check.",
     "bec_vip_impersonation": "The display name impersonates a protected VIP/executive name AND the message body matches a BEC financial-request pattern — a high-confidence combination.",
+    "bulk_sender_no_unsubscribe": "Presents as bulk mail (Precedence: bulk/list, or a List-Id header) but is missing the List-Unsubscribe header legitimate bulk senders are required to include — spam frequently omits or fakes this.",
+    # A handful of the highest-value app/attachment_forensics.py findings,
+    # curated for readability — every other forensics_<flag> tag still shows
+    # up via the generic "unrecognized tag" fallback below, just less
+    # polished (e.g. "Forensics pdf javascript").
+    "forensics_office_macro": "Attachment contains an Office macro (VBA project) — can run code automatically when opened.",
+    "forensics_archive_contains_executable": "Attachment is an archive containing an executable or macro-capable file inside it.",
+    "forensics_pdf_auto_executing_action": "Attachment PDF combines an auto-triggering action with JavaScript/launch/remote-goto content — opens and runs without further clicks.",
+    "forensics_high_entropy_content": "Attachment content has unusually high byte entropy for its apparent type — consistent with packed/encrypted/obfuscated payloads.",
+    "forensics_possible_zip_bomb": "Attachment archive's compression ratio or uncompressed size exceeds safe bounds — consistent with a decompression-bomb resource-exhaustion attempt.",
+    "forensics_encrypted_archive": "Attachment archive has password-protected/encrypted members — a known technique for hiding malicious content from automated scanning.",
+    "forensics_executable_content": "Attachment's actual content is executable code, regardless of its declared file type.",
 }
 _FLAG_PREFIX_DESCRIPTIONS = {
     "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
@@ -67,10 +81,31 @@ _FLAG_PREFIX_DESCRIPTIONS = {
     "intel_url": "URL '{value}' matched a known-bad threat-intelligence indicator.",
     "intel_hash": "Attachment hash '{value}' matched a known-bad threat-intelligence indicator.",
     "ai": "AI reviewer identified a pattern not in the standard checklist: {value}",
+    "spoofed_attachment_type": "An attachment's actual file type (from its content, not its name) doesn't match its declared extension: {value} — a classic disguised-executable trick.",
+    "double_extension_executable": "Attachment filename hides an executable behind a benign-looking extension (e.g. invoice.pdf.exe): {value}",
+    "correlation_seen_before": "One of this email's indicators (indicator:count = {value}) was already seen in a prior SUSPICIOUS/MALICIOUS verdict from this pipeline's own history.",
+    "domain_age_low": "The sender's domain was registered only {value} day(s) ago — newly-registered domains are common phishing infrastructure.",
+}
+
+
+# TMES-parity policy category keys (rules/policy.yaml) -> display name, for
+# the "policy_suppressed:" rendering below.
+_CATEGORY_DISPLAY_NAMES = {
+    "advanced_spam_protection": "Advanced Spam Protection",
+    "malware_scanning": "Malware Scanning",
+    "file_blocking": "File Blocking",
+    "web_reputation": "Web Reputation",
+    "virtual_analyzer": "Virtual Analyzer",
+    "correlated_intelligence": "Correlated Intelligence",
 }
 
 
 def _describe_flag(flag: str) -> str:
+    if flag.startswith("policy_suppressed:"):
+        underlying = flag[len("policy_suppressed:"):]
+        category = policy_mod.category_for_flag(underlying)
+        label = _CATEGORY_DISPLAY_NAMES.get(category, "A disabled policy category")
+        return f"{label} is disabled — this would have flagged: {_describe_flag(underlying)}"
     if flag in _FLAG_DESCRIPTIONS:
         return _FLAG_DESCRIPTIONS[flag]
     prefix, sep, value = flag.partition(":")

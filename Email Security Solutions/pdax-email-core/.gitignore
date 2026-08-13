@@ -1,0 +1,16 @@
+# GCP service-account keys and other local credentials — never commit these.
+credentials.json
+*-service-account.json
+*.pem
+.env
+
+.venv/
+__pycache__/
+*.pyc
+
+# Local SEG spool (quarantine / shadow logs / released) — never commit mail.
+gateway/spool/quarantine/
+gateway/spool/released/
+gateway/spool/rejected/
+gateway/spool/shadow_logs/
+gateway/spool/hold/

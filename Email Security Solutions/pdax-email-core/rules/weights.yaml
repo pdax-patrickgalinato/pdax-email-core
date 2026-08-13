@@ -1,0 +1,16 @@
+# Stage sub-score weights and verdict thresholds.
+# Tune these against the golden set (tests/run_eval.py) before enforcement.
+# Hard overrides in verdict.py bypass this weighting for high-confidence cases.
+
+weights:
+  headers: 20
+  sender: 15
+  urls: 20
+  attachments: 15
+  content_ai: 10
+  intel: 20        # weight applies to non-hit degraded cases; a hit is a hard override
+
+thresholds:
+  malicious: 70
+  suspicious: 45
+  low: 20

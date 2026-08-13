@@ -1,0 +1,305 @@
+"""Stage 10 — reporting. Human-readable text report + Slack Block Kit payload
++ JSONL audit record."""
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime, timezone
+
+from .models import PipelineResult, Verdict
+
+_ICON = {Verdict.CLEAN: "🟢", Verdict.LOW: "🔵",
+         Verdict.SUSPICIOUS: "🟠", Verdict.MALICIOUS: "🔴"}
+
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+# Human-readable descriptions for every flag a stage can emit. Machine tags
+# like "brand_impersonation_display_name:sharefile" tell you a rule fired but
+# not what an analyst should actually understand from that — this is the
+# translation layer. Exact-match tags first; ":value" tags are matched on the
+# prefix and the value is interpolated into the template.
+_FLAG_DESCRIPTIONS = {
+    "spf_fail": "Sender failed SPF authentication — the sending server isn't authorized to send for this domain.",
+    "spf_softfail": "Sender softfailed SPF — the sending server is only weakly authorized for this domain.",
+    "dkim_fail": "DKIM signature failed to verify — the message may have been altered in transit, or isn't really from the claimed domain.",
+    "dmarc_fail": "DMARC failed — this domain's own policy says messages like this shouldn't be trusted.",
+    "return_path_mismatch": "The bounce address (Return-Path) doesn't match the visible From domain — common in spoofed mail.",
+    "reply_to_divergent": "Replies would go to a different domain than the visible sender — a classic reply-hijack tell.",
+    "display_name_email_mismatch": "The display name shows one email address, but the real sending address is a different one entirely.",
+    "display_name_is_email": "The display name is itself formatted as an email address, matching the real sender — lower risk on its own, but unusual.",
+    "freemail_corporate_persona": "Sent from a free consumer email domain (Gmail, Yahoo, etc.) but the display name claims to be IT/finance/support — a common BEC shape.",
+    "html_attachment_credential_form": "An attached HTML file contains a login/password form — a classic offline credential-harvest page.",
+    "url_embedded_redirect": "A link hides another destination inside its own parameters (a redirect wrapper) — not inherently bad, but the real target matters more than the visible link.",
+    "url_ip_literal": "A link points straight at a raw IP address instead of a domain name — legitimate services almost never do this.",
+    "url_brand_keyword_offbrand": "A link's domain contains a trust word (login, secure, verify, etc.) despite not being a recognized brand domain.",
+    "url_deep_subdomain": "A link uses an unusually deep chain of subdomains — often used to bury the real (malicious) domain from casual view.",
+    "url_oauth_state_email_exposure": "A Microsoft/Google-style login link has a real email address baked into its `state` parameter — legitimate apps never do this; it's a sign of a templated credential-phishing or account-reconnaissance link.",
+    "url_redirect_unrelated_domain": "A tracking/redirect link's real destination is unrelated to both the wrapper and the sender's own domain — legitimate trackers redirect back to their own brand, not somewhere else.",
+    "url_redirect_to_page_file": "A redirect link's real destination is a bare .html/.php page on someone else's site — the typical shape of a dropped phishing page.",
+    "url_redirect_to_ip": "A redirect/tracker link's real destination is a raw IP address — no legitimate tracker's actual destination is a bare IP.",
+    "anchor_href_mismatch": "The clickable text of a link names one domain, but the link actually goes somewhere else.",
+    "content_padding_evasion": "The email body contains an unusually large block of blank/whitespace lines — a known trick to bury the real lure or dodge automated content scanning.",
+    "urgency_language": "The wording pressures urgent action (deadlines, threats, \"immediately\") — a standard social-engineering tactic.",
+    "credential_request": "The wording asks you to log in, verify, or confirm your identity/credentials.",
+    "bec_pattern": "The wording matches a Business Email Compromise pattern (gift cards, wire transfers, \"are you available\").",
+    "generic_greeting": "Uses a generic greeting (\"Dear Customer\", etc.) instead of your actual name — common in mass-sent phishing.",
+    "payment_lure_subject": "The subject line uses a financial-document pretext (invoice, disbursement, statement, etc.) — one of the most common phishing lures.",
+    "fake_reply_prefix": "The subject looks like a reply (\"Re:\") to a conversation that doesn't actually exist in this mailbox's thread history.",
+    "brand_impersonation": "The email's own wording claims to be a specific brand/organization in a way that doesn't fit the rest of the message.",
+    "unusual_request": "An AI reviewer flagged this as an unusual or out-of-context request.",
+    "prompt_injection_attempt": "The email body tried to instruct the AI reviewer directly (e.g. \"ignore previous instructions\") — the attempt itself was treated as a red flag, not followed.",
+    "threat_intel_hit": "One of this email's domains/URLs/hashes matched a known-bad indicator in threat intelligence.",
+    "url_lookalike_domain": "A link's domain is a near-identical lookalike of one of PDAX's protected domains.",
+    "banned_attachment_type": "This email has an attachment of a file type that's outright banned (executables, scripts, etc.).",
+    "sender_lookalike_domain": "The sender's own domain is a near-identical lookalike of one of PDAX's protected domains.",
+    "bec_vip_impersonation": "The display name impersonates a protected VIP/executive name AND the message body matches a BEC financial-request pattern — a high-confidence combination.",
+}
+_FLAG_PREFIX_DESCRIPTIONS = {
+    "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
+    "macro_capable_doc": "Attachment is a macro-capable Office document (.{value}) — can run code when opened.",
+    "url_lookalike": "A link's domain is a near-identical lookalike of the protected domain '{value}'.",
+    "url_risky_tld": "A link uses a top-level domain (.{value}) associated with high spam/abuse rates.",
+    "lookalike_of": "The sender's domain is a near-identical lookalike of the protected domain '{value}'.",
+    "vip_name_spoof": "The display name impersonates a watched VIP/executive name ('{value}') while sending from an unrelated domain.",
+    "brand_impersonation_display_name": "The display name claims to be from '{value}' (a known e-sign/file-share brand), but the sending domain has no relationship to that brand.",
+    "intel_domain": "Domain '{value}' matched a known-bad threat-intelligence indicator.",
+    "intel_ip": "IP '{value}' matched a known-bad threat-intelligence indicator.",
+    "intel_url": "URL '{value}' matched a known-bad threat-intelligence indicator.",
+    "intel_hash": "Attachment hash '{value}' matched a known-bad threat-intelligence indicator.",
+    "ai": "AI reviewer identified a pattern not in the standard checklist: {value}",
+}
+
+
+def _describe_flag(flag: str) -> str:
+    if flag in _FLAG_DESCRIPTIONS:
+        return _FLAG_DESCRIPTIONS[flag]
+    prefix, sep, value = flag.partition(":")
+    if sep and prefix in _FLAG_PREFIX_DESCRIPTIONS:
+        return _FLAG_PREFIX_DESCRIPTIONS[prefix].format(value=value)
+    # Unrecognized tag (e.g. a new rule not yet added here) — still show
+    # something readable rather than silently dropping it.
+    return flag.replace("_", " ").replace(":", ": ").capitalize()
+
+
+def _sanitize(s: str) -> str:
+    """From/Subject are attacker-controlled and MIME-decoded upstream, so they
+    can carry raw bytes — including ANSI escape sequences (cursor move, erase
+    line, color) that a crafted Subject can use to spoof the printed verdict
+    line in an analyst's terminal. Strip control chars and flatten embedded
+    CR/LF so a header value can never inject a fake report line."""
+    s = (s or "").replace("\r", " ").replace("\n", " ")
+    return _CONTROL_CHARS.sub("", s)
+
+
+def _slack_escape(s: str) -> str:
+    """Slack mrkdwn treats bare &, <, > as markup — an unescaped Subject/From
+    of e.g. "<!channel>" or "<@Uxxxx>" would render as a real channel-wide
+    ping or user mention when this lands in Slack. Escape per Slack's API."""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _verdict_margin(r: PipelineResult) -> str:
+    """A bare score/verdict doesn't tell you how confidently it landed there.
+    Show the distance to the next threshold up/down so "SUSPICIOUS at 45"
+    reads as either "just barely" or "deep into this band"."""
+    t = r.thresholds
+    if not t or r.hard_override:
+        return ""
+    score = r.composite_score
+    if r.verdict == Verdict.MALICIOUS:
+        return f"  ({score - t.get('malicious', 70):.1f} points above the MALICIOUS threshold of {t.get('malicious', 70)})"
+    if r.verdict == Verdict.SUSPICIOUS:
+        return (f"  ({t.get('malicious', 70) - score:.1f} points below MALICIOUS ({t.get('malicious', 70)}), "
+                f"{score - t.get('suspicious', 45):.1f} above SUSPICIOUS ({t.get('suspicious', 45)}))")
+    if r.verdict == Verdict.LOW:
+        return (f"  ({t.get('suspicious', 45) - score:.1f} points below SUSPICIOUS ({t.get('suspicious', 45)}), "
+                f"{score - t.get('low', 20):.1f} above LOW ({t.get('low', 20)}))")
+    return f"  ({t.get('low', 20) - score:.1f} points below the LOW threshold of {t.get('low', 20)})"
+
+
+def _ioc_context(r: PipelineResult) -> dict:
+    """Best-effort per-IOC context, built entirely from what this analysis
+    already computed — NOT a live reputation lookup. The real IntelClient
+    (VirusTotal/AbuseIPDB) is still a stub (see HANDOFF.md); don't present
+    this as more than it is. This exists to distinguish "this specific
+    indicator is why we flagged the email" from "this was merely observed
+    in transit" — e.g. a TrendMicro relay IP is expected infrastructure, not
+    a lead, while an intel-hit domain is exactly that."""
+    notes: dict[str, str] = {}
+    headers = r.stage("headers")
+    sender = r.stage("sender")
+    urls_stage = r.stage("urls")
+    intel = r.stage("intel")
+
+    if sender and isinstance(sender.facts, dict):
+        from_dom = sender.facts.get("from_domain")
+        if from_dom and sender.facts.get("lookalike_of"):
+            notes[from_dom] = f"lookalike of protected domain '{sender.facts['lookalike_of']}'"
+        if from_dom and sender.facts.get("brand_impersonation"):
+            notes.setdefault(from_dom, f"display name impersonates brand '{sender.facts['brand_impersonation']}'")
+
+    if headers and isinstance(headers.facts, dict):
+        fd = headers.facts.get("from_domain")
+        rp, rt = headers.facts.get("return_path_domain"), headers.facts.get("reply_to_domain")
+        if headers.facts.get("return_path_mismatch") and rp:
+            notes.setdefault(rp, f"Return-Path domain differs from the visible From domain ({fd})")
+        if headers.facts.get("reply_to_divergent") and rt:
+            notes.setdefault(rt, f"Reply-To domain differs from the visible From domain ({fd})")
+
+    if urls_stage and isinstance(urls_stage.facts, dict):
+        for rec in urls_stage.facts.get("urls", []):
+            key = rec.get("url")
+            if not key:
+                continue
+            bits = []
+            if rec.get("lookalike_of"):
+                bits.append(f"lookalike of protected domain '{rec['lookalike_of']}'")
+            if rec.get("redirect_unrelated"):
+                bits.append("redirect's real target is unrelated to the sender/wrapper domain")
+            if rec.get("redirect_page_file"):
+                bits.append("real target is a bare page dropped on a third-party domain")
+            if rec.get("oauth_state_email_exposure"):
+                bits.append("OAuth link exposes a real email address in its state parameter")
+            if rec.get("ip_literal"):
+                bits.append("raw IP address, not a domain")
+            if bits:
+                notes[key] = "; ".join(bits)
+
+    if intel and intel.red_flags:
+        for hit in intel.red_flags:
+            _, _, value = hit.partition(":")
+            if value:
+                notes[value] = "MATCHED KNOWN-BAD THREAT INTEL"
+
+    return notes
+
+
+def _ioc_lines(label: str, values: list, notes: dict) -> list:
+    """Renders one IOC category, one value per line, flagging any with
+    computed context (see _ioc_context) and printing a plain "none observed"
+    when the category is empty rather than an empty list literal."""
+    if not values:
+        return [f"  {label}: none observed"]
+    out = [f"  {label}:"]
+    for v in values:
+        note = notes.get(str(v))
+        out.append(f"    - {v}" + (f"   [{note}]" if note else ""))
+    return out
+
+
+def text_report(r: PipelineResult) -> str:
+    lines = []
+    lines.append("=" * 64)
+    lines.append(f"  VERDICT: {r.verdict.value}   score={r.composite_score}{_verdict_margin(r)}")
+    if r.hard_override:
+        lines.append(f"  HARD OVERRIDE: {r.hard_override} — {_describe_flag(r.hard_override)}")
+    lines.append(f"  DISPOSITION: {r.disposition.value}   (enforce_mode={r.enforce_mode.value})")
+    if r.disposition_reason:
+        lines.append(f"  DISPOSITION REASON: {r.disposition_reason}")
+    if r.enforcement_applied:
+        lines.append(f"  ENFORCEMENT APPLIED: {r.enforcement_applied}")
+    lines.append("=" * 64)
+    lines.append(f"From    : {_sanitize(r.from_header)}")
+    lines.append(f"Subject : {_sanitize(r.subject)}")
+    lines.append(f"Source  : {r.source}")
+    lines.append("")
+    lines.append("Stages:")
+    ai_summary = None
+    for s in r.stages:
+        flags = ", ".join(s.red_flags) if s.red_flags else "-"
+        lines.append(f"  [{s.status.value:>8}] {s.stage:<12} score={s.sub_score:>5.1f}  {flags}")
+        # A degraded/errored stage (e.g. an AI provider outage or a bad API
+        # key) is otherwise silent here — you'd see "degraded" with no way
+        # to tell why. Surface the captured reason so this is diagnosable
+        # without dropping into --json.
+        err = s.facts.get("error") if isinstance(s.facts, dict) else None
+        if err:
+            lines.append(f"             reason: {_sanitize(str(err))}")
+        if isinstance(s.facts, dict) and s.facts.get("triage_skipped_llm"):
+            lines.append("             triage: heuristic-only — score not near a threshold boundary, LLM call skipped")
+        elif isinstance(s.facts, dict) and s.facts.get("triage_escalated"):
+            lines.append("             triage: escalated to LLM — heuristic-only score was near a threshold boundary")
+        if s.stage == "content_ai" and isinstance(s.facts, dict) and s.facts.get("summary"):
+            ai_summary = s.facts["summary"]
+    lines.append("")
+    if ai_summary:
+        # The AI provider's own one/two-sentence rationale — computed on
+        # every real (non-heuristic) run but previously thrown away. This is
+        # usually the single most useful line for "is this actually bad?".
+        lines.append(f"AI assessment: {_sanitize(ai_summary)}")
+        lines.append("")
+    lines.append("Why this verdict:")
+    if r.reasons:
+        for flag in r.reasons:
+            lines.append(f"  - {_describe_flag(flag)}")
+    else:
+        lines.append("  - No red flags fired on any stage.")
+    lines.append("")
+    lines.append("Reasons (raw tags): " + (", ".join(r.reasons) if r.reasons else "none"))
+    lines.append("")
+    lines.append("IOCs:")
+    lines.append("  (context in [brackets] is this analysis's own rule-based findings — NOT")
+    lines.append("   a live threat-intel/reputation lookup; that provider is still a stub)")
+    notes = _ioc_context(r)
+    lines.extend(_ioc_lines("senders ", r.iocs.sender_emails, notes))
+    lines.extend(_ioc_lines("domains ", r.iocs.domains, notes))
+    lines.extend(_ioc_lines("ips     ", r.iocs.ips, notes))
+    lines.extend(_ioc_lines("urls    ", r.iocs.urls, notes))
+    lines.extend(_ioc_lines("hashes  ", r.iocs.hashes_sha256, notes))
+    lines.extend(_ioc_lines("auth relay senders", r.iocs.authenticated_relay_senders, notes))
+    return "\n".join(lines)
+
+
+def slack_blocks(r: PipelineResult) -> dict:
+    icon = _ICON.get(r.verdict, "")
+    top = "*Reason:* " + (r.hard_override or ", ".join(r.reasons[:5]) or "weighted score")
+    from_safe = _slack_escape(_sanitize(r.from_header))[:120]
+    subject_safe = _slack_escape(_sanitize(r.subject))[:120]
+    return {
+        "blocks": [
+            {"type": "header",
+             "text": {"type": "plain_text", "text": f"{icon} {r.verdict.value} — email analyzed"}},
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*From:*\n{from_safe}"},
+                {"type": "mrkdwn", "text": f"*Score:*\n{r.composite_score}"},
+                {"type": "mrkdwn", "text": f"*Subject:*\n{subject_safe}"},
+                {"type": "mrkdwn", "text": f"*Disposition:*\n{r.disposition.value} ({r.enforce_mode.value})"},
+            ]},
+            {"type": "section", "text": {"type": "mrkdwn", "text": _slack_escape(top)}},
+        ]
+    }
+
+
+def audit_record(r: PipelineResult) -> str:
+    ai_summary = next(
+        (s.facts["summary"] for s in r.stages
+         if s.stage == "content_ai" and isinstance(s.facts, dict) and s.facts.get("summary")),
+        None,
+    )
+    rec = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "message_id": r.message_id,
+        "source": r.source,
+        "verdict": r.verdict.value,
+        "score": r.composite_score,
+        "disposition": r.disposition.value,
+        "disposition_reason": r.disposition_reason,
+        "enforce_mode": r.enforce_mode.value,
+        "enforcement_applied": r.enforcement_applied,
+        "thresholds": r.thresholds,
+        "hard_override": r.hard_override,
+        "reason_tags": r.reasons,
+        "reasons": [{"tag": flag, "description": _describe_flag(flag)} for flag in r.reasons],
+        "ai_summary": ai_summary,
+        "stages": [{"stage": s.stage, "status": s.status.value,
+                    "score": s.sub_score, "flags": s.red_flags,
+                    **({"error": s.facts["error"]} if isinstance(s.facts, dict) and s.facts.get("error") else {}),
+                    **({"triage_skipped_llm": True} if isinstance(s.facts, dict) and s.facts.get("triage_skipped_llm") else {}),
+                    **({"triage_escalated": True} if isinstance(s.facts, dict) and s.facts.get("triage_escalated") else {})}
+                   for s in r.stages],
+        "iocs": r.iocs.model_dump(),
+        # Rule-based context per IOC — NOT a live reputation/intel lookup,
+        # see _ioc_context()'s docstring. Keys are the IOC value itself.
+        "ioc_context": _ioc_context(r),
+    }
+    return json.dumps(rec, ensure_ascii=False)

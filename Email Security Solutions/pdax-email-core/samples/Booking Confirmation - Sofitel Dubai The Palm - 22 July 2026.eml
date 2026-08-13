@@ -1,0 +1,289 @@
+Delivered-To: dana.bernardo@pdax.ph
+Received: by 2002:a05:6402:2b86:b0:67e:a5fa:9237 with SMTP id fj6csp1504682edb;
+        Sun, 10 May 2026 17:23:25 -0700 (PDT)
+X-Received: by 2002:a05:7022:117:b0:12d:de3e:86b4 with SMTP id a92af1059eb24-132a85f4f69mr3412315c88.36.1778459005007;
+        Sun, 10 May 2026 17:23:25 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1778459005; cv=none;
+        d=google.com; s=arc-20240605;
+        b=T6/lN3AuTpCq9ORsqvWTqgxlCP++oTT5jP2Gkttxos1eJ0mYkNVIa9bumpwqZpp0pC
+         4EEHopwSkZYU3vHAJDlytJIk5BEw5WrNiUpjnAHeDiCePxv76sf1TQ/ZsVFqYETedydL
+         EH/+W7RdxsPQz9o98Rw4uE2fD/bEwVGyqFxSpK8NM6dqCFrpt+wmPzm3V0tEDcybUwd/
+         hg8vIDgMMETgiov5v9UiKgQgIN/PyD+S8A7V9sNONV/HDc7fzWpnF2hkgp/EfqzUiv+3
+         gdt6wKNQW52aPJEsSLFRlX8d5dX+SEVLXaknFGv4IqKOhvgMAx85+6fqc2/Z8ATLAv/u
+         2low==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=content-transfer-encoding:to:mime-version:subject:message-id:sender
+         :from:date:dkim-signature;
+        bh=IqoYt42/X4kuxLSmBXICgsJbQl6OGv9j+/gjgp7DvRA=;
+        fh=O5or9BGhMlWe6AzpnpSvVK7lVMyD1cr6Izu/81UhUM4=;
+        b=JVeLSvCqWsAt2VRwzCjD53Bv46CnrRhS9NVXcAMtRsYKxemA3GeHsoXm4BqqejQ/wy
+         gbeHxlgfU24654C8fur/LqjP0Msmnee2J5jMSaFNerAcEeYYTUbYy3h7IH1Al3svgOqz
+         piPh4hylrcJnhH5y+txUrgS0e3oRbIkA3D0JS/N2XcWoI0XwC7OzpM5/8SGIFjxFSZ0B
+         Cl5/aqku1fTXnNAGtRLbx2lwrFGTiQcq0J+O1r2UlxL4PX+RvQ9tOOY76Id3cP8n5qdd
+         DpVggz2IFUi05nLBLV0Qu9gRdw9DphcnxQ6Q4MMCdScupZ5/ndEd5Ow+qJ6pDi+90XMm
+         hriQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=neutral (body hash did not verify) header.i=@recurly.com header.s=s1 header.b=Qhhwd+xk;
+       spf=pass (google.com: domain of bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com designates 167.89.104.131 as permitted sender) smtp.mailfrom="bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com"
+Return-Path: <bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com>
+Received: from inpost.tmes.trendmicro.com (inpost.tmes.trendmicro.com. [18.208.22.105])
+        by mx.google.com with ESMTPS id a92af1059eb24-13278875462si25541760c88.45.2026.05.10.17.23.24
+        for <dana.bernardo@pdax.ph>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Sun, 10 May 2026 17:23:24 -0700 (PDT)
+Received-SPF: pass (google.com: domain of bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com designates 167.89.104.131 as permitted sender) client-ip=167.89.104.131;
+Authentication-Results: mx.google.com;
+       dkim=neutral (body hash did not verify) header.i=@recurly.com header.s=s1 header.b=Qhhwd+xk;
+       spf=pass (google.com: domain of bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com designates 167.89.104.131 as permitted sender) smtp.mailfrom="bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com"
+Received: from 167.89.104.131_.trendmicro.com (unknown [192.168.181.90])
+	by inpost.tmes.trendmicro.com (Postfix) with SMTP id 91A861000030F
+	for <dana.bernardo@pdax.ph>; Mon, 11 May 2026 00:23:22 +0000 (UTC)
+X-TM-MAIL-RECEIVED-TIME: 1778459000.881000
+X-TM-MAIL-UUID: 83636ebd-da3b-4332-9be4-50c95d9204e3
+Received: from xtrwsvvp.outbound-mail.sendgrid.net (unknown [167.89.104.131])
+	by inpre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id D740210001E0F
+	for <dana.bernardo@pdax.ph>; Mon, 11 May 2026 00:23:20 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=recurly.com;
+	h=date:from:sender:subject:mime-version:to:content-type:
+	content-transfer-encoding:cc:content-type:date:from:subject:to;
+	s=s1; t=1778459000;
+	bh=8KTTTjG71QIIt7XKP1/4YSRqis891Z1XS62MdQVGVpw=;
+	b=Qhhwd+xkOz/29MR2LjUB/S6l0c7LmoWQYIZppr7BJuE99t2dIg/9W5kFFQJ04GM6ocDF
+	ZtGkq9lEKxPZna61XMSxc7NACQkAVZm+9kuOPK6xXVKXBze/J2wKueIy9POgQDnymkBckW
+	D+R65hpHQx/KyQauMPTiF3Sv9WFYroZruUI0N5Um+jQOs1qw1PYTcGpb8CDT/kUKDVxLUY
+	Hd0X7aIk8dyUxTlS6y7sZwjs4zB6qkO2h3+VXSnNIOs7c7GGUSGvVaMrH66iH58Q0D+8Z5
+	MlimdLnH4Dw7KVlNH1v9uEdu2QlPYQUnHzt25yz/GhfPSPmOW6VpB2EvSqc5AVJQ==
+Received: by recvd-5d4fb956cc-kc2xp with SMTP id recvd-5d4fb956cc-kc2xp-1-6A012178-2E
+	2026-05-11 00:23:20.318480303 +0000 UTC m=+1046647.561597128
+Received: from postfix-0.production1.recurly.net (unknown)
+	by geopod-ismtpd-100 (SG) with ESMTP id lw76kl47R1eYQG4H9uXZiQ
+	for <dana.bernardo@pdax.ph>; Mon, 11 May 2026 00:23:20.273 +0000 (UTC)
+Date: Mon, 11 May 2026 00:23:20 +0000 (UTC)
+From: Hotels@accor.com
+Sender: bounce+starter+ywlyi77q8yo9@return.recurly.com
+Message-ID: <6a01217882be_1282524823765715d@emaily-consumer-7f4ff5dfc4-xx6bc.mail>
+Subject: Booking Confirmation - Sofitel Dubai The Palm - 22 July 2026
+Mime-Version: 1.0
+X-SG-EID: 
+ =?us-ascii?Q?u001=2ELvWyNKEJnUtHQTMed7MQR=2FD0oM8fpWujdPT+sBbeM5kal+vHq9gi6tG6g?=
+ =?us-ascii?Q?rqJGkUb1Aj1QZPMN3gsMcxAbyaHfWPODX3QGMCj?=
+ =?us-ascii?Q?jCXxk312jpGcCS5NCpu1gKQIWHRppAN1ponnaHU?=
+ =?us-ascii?Q?7zlnUW5ypQWGwEK+lM6wtR0K7zdPuD0Br0iS6t3?=
+ =?us-ascii?Q?DGRt3otGqV34JrGijofDz7wmAOSFnwhnTlJCeqm?=
+ =?us-ascii?Q?w=3D=3D?=
+X-SG-ID: 
+ =?us-ascii?Q?u001=2ESdBcvi+Evd=2FbQef8eZF3BpTL9BgbK5wfSJMJGMsmprBhrCiPUZ830uaWo?=
+ =?us-ascii?Q?Pv5c4qvl=2FydEuM29jjwZDIYMMl9QbSpZ7gz=2FlkC?=
+ =?us-ascii?Q?SahgH4YKwz9mLcG8dXi8OzlI=2FgqVHFxmO85OTGY?=
+ =?us-ascii?Q?ow95=2FiVDrSLsm5DDNsuhZs3dYaZ4drHntNarGSs?=
+ =?us-ascii?Q?l+ZCHyLvj2=2FEJg9w7A?=
+To: dana.bernardo@pdax.ph
+X-Entity-ID: u001.gbszUnuICadaEl+uvTWcCA==
+Content-Type: multipart/mixed;
+ boundary="--==_mimepart_6a01217880b7_1282524823765704a";
+ charset=UTF-8
+Content-Transfer-Encoding: 7bit
+X-TM-Received-SPF: Pass (domain of 
+	bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com designates 
+	167.89.104.131 as permitted sender) client-ip=167.89.104.131; 
+	envelope-from=bounces+3665674-6df5-dana.bernardo=pdax.ph@email.recurly.com;
+	 helo=xtrwsvvp.outbound-mail.sendgrid.net
+X-TM-Authentication-Results: spf=pass (sender IP address: 167.89.104.131) 
+	smtp.mailfrom=email.recurly.com; dkim=none (no processed signatures) 
+	header.d=none; dmarc=fail action=none header.from=accor.com; arc=none
+X-TM-AS-ERS: 167.89.104.131-127.5.250.21
+X-TMASE-Version: StarCloud-1.3-9.2.1014-29936.003
+X-TMASE-Result: 10--16.332100-10.000000
+X-TMASE-MatchedRID: ANCKU1siEljShjVo4GG2NuPh9wuCzX4QIHvYSTItGbdTZVGeQS6N2tg7
+	+WCFoJRgFFzaf2J+d+x4lyF1lyvUrXMXq9xnA1p+BtAswtxg2VpvSvtg+ZtwNuTK0ykvOL9CUBv
+	XSo+zEQx+PGwkBh2hnEiFscI0m1mo5gNMMofIHJ8al2N4XT5mxB0cX7HoE2U2rZLPoWdXjQ+8ob
+	NWC9+Yx/5o5Mi94RJdDlfCHRS2pXwnnCbU6fYQs9nJfROUxYILjJutEurp1uTXcJfkoesx0RuRd
+	4OXTPmqR8JZOO3apprRcH+pqIdu3cG84Rkto6bFh9DDCOZ7gK1uDZZnEQbQz1NWY2edIqPoWajR
+	tFBaM9d1xoGxA2ZVjgqnPeBhr7S4yrWgFz6DJECZKt6hWDoluIu1n29Gyo/Bzo/HVgMdRwht/WI
+	T11lQaoFQicg1tQjzFRNjCVdvnSlG0CRItylJbwginKbEhUUokwL+WVNmKidtLVUZ/8p4gSIYOt
+	02uIowqMQ/Jzm2wiefNfS+gw8cprlHiQrgfWi9pX5imcHh9tPooQk7tJHpeAjbsg1mYpilvZc1R
+	lmploDh+0R5IBKRsiT5U3lJ4T8KVj8ed+k2TEBptAWTUr1acb8028+VLDL72fpW+QTcL3869PfQ
+	bmc4m37cGd19dSFd
+X-TMASE-SNAP-Result: 1.821001.0001-0-1-1:1,22:0,28:1,33:0,34:0,42:1-0
+X-TMASE-XGENCLOUD: d45d6177-907c-4567-8a18-e93a3b1e3b68-0-0-200-0
+X-TM-RISKAI-PTN-VERSION: 1.24.0+20260507.6e33675
+X-TM-RISKAI-MATCHEDFID: WyJGSUwwMDIiLCAiRklMMDM2IiwgIkZJTDA0MCIsICJGSUwwNjEi
+	LCAiRklMMDY5IiwgIkZJTDA3MiIsICJGSUwwNzgiLCAiRklMMDc5IiwgIkZJTDA4MCIsICJGSUw
+	wODFOIiwgIkZJTDA4NSIsICJGSUwwODciLCAiRklMMDkwIiwgIkZJTDA5NiIsICJGSUwwOTciLC
+	AiRklMMDk4IiwgIkZJTDEwMCIsICJGSUwxMTYiLCAiRklMMTE3IiwgIkZJTDEyMSIsICJGSUwxM
+	zciLCAiRklMMTQ3IiwgIkZJTDE1MyIsICJGSUwxNjkiLCAiRklMMTcyIiwgIkZJTDE5NyIsICJG
+	SUwxOTgiLCAiRklMMjAwIiwgIkZJTDI1MiJd
+X-TM-Deliver-Signature: 9CF64795DA4028A9F66F7B1F4D064967
+X-TM-Addin-Auth: bKi8ZmoiJxpn4TyIvFiFY7gQpOY54ogYPEp8MkF8EwYQCZRpDto2kn0CVw/
+	2OIDZ0injTAkyAdcgZqpTatIONCtLa1mKcuJbgVocaJfSr5z++a2NVfWgmEKxn/XQGxOjJnDtsN
+	lU4qH8qU759wgtIKsfuwdTi+hh7xQs0G3MPuVp/NJp7tz+9JysaUbG0WxaLMu90Jqeo+pqFLFyp
+	nPyjFkN0UvoLNwjib56LqquBGvCU2FZ1G19nsa4LqeVZRCvUKEFG5xoZGEnZPT6h1/VTfHn4FsP
+	DKftutrGbFN0VmdovlYwDVuOruOtsgDpVTibNh57wx8hWCRdjjsNQRSEDw==.xBZgfUvJcg+Hc6
+	w57JGqjGgre3vNbwpkzc6dmGHqAkfDnSNoKTN/9xbgDFBRopVgTk8UzjCg8fqhIEZ5uAs1cfSss
+	70Q03S9FJyLVJcw9BrX7CqAL59+6Wv0iUet3Cgzx4fmR4eJ1vy6m0TWnlnzjp3qkMHonMbI4ogg
+	iGswcstdqKSSyGI3SH4yygqQjx0N7r/1COjB3taOPj2zqDND6eb7TR+wFN+sl9HBDG6wYFpOa9M
+	zcgtJlYHnbFxpy0sVYLX8idF9JJJK3z0S6TWKaN+rZTXqx/C35ss6OEQFlJ0TuUWee/FSRfNfJx
+	4CxUZedOc20opc2q/Mg1muP0Ecaw==
+X-TM-Addin-ProductCode: EMS
+
+
+----==_mimepart_6a01217880b7_1282524823765704a
+Content-Type: multipart/alternative;
+ boundary="--==_mimepart_6a0121788064_12825248237656949"
+Content-Transfer-Encoding: 7bit
+
+
+----==_mimepart_6a0121788064_12825248237656949
+Content-Type: text/html;
+	charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<table width=3D100%><tr><td bgcolor=3D#ffffff><font color=3D#000000><pre>=
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"left" wi=
+dth=3D"100%" style=3D"width:100.0%;table-layout:fixed;"><tbody><tr><td st=
+yle=3D"width:1.0%;background:#ff9838;padding:5.25pt 1.5pt 5.25pt 1.5pt"><=
+/td><td width=3D"100%" style=3D"width:100.0%;background:#ffdcbb;padding:5=
+.25pt 3.75pt 5pt 11.25pt; word-wrap:break-word" cellpadding=3D"7px 5px 7p=
+x 15px" color=3D"#212121"><p style=3D"text-align: left;"><strong><span st=
+yle=3D"color: #e03e2d;">EXTERNAL:</span></strong> Please be cautious in o=
+pening the contents of this email.</p></td></tr></tbody></table></pre></f=
+ont></td></tr></table>
+<!DOCTYPE html><html lang=3D"en"><head>
+    <meta charset=3D"UTF-8">
+    <meta name=3D"viewport" content=3D"width=3Ddevice-width, initial-scal=
+e=3D1.0">
+    <title>Booking Confirmation</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; margin:0; paddi=
+ng:0; background:#f8f8f8; color:#333333; line-height:1.65; }
+        .container { max-width: 620px; margin: 30px auto; background:#fff=
+fff; border:1px solid #e8e8e8; border-radius: 8px; overflow:hidden; box-s=
+hadow: 0 5px 25px rgba(0,0,0,0.08); }
+        .header { background:#002244; padding:32px 40px; color:white; tex=
+t-align:center; }
+        .header h1 { margin:0; font-size:26px; font-weight:600; }
+        .header p { margin:10px 0 0; font-size:15.5px; opacity:0.95; }
+        .content { padding:40px 45px 35px; }
+        .greeting { font-size:17.5px; margin-bottom:18px; }
+        table { width:100%; border-collapse:collapse; margin:22px 0; }
+        td { padding:11px 0; border-bottom:1px solid #f0f0f0; }
+        .label { width:46%; color:#555555; font-weight:600; }
+        .value { color:#222222; }
+        .total { font-size:21px; font-weight:bold; color:#002244; }
+        .button { 
+            display:block; margin:28px auto; padding:14px 34px; backgroun=
+d:#002244; 
+            color:white; text-decoration:none; border-radius:5px; font-we=
+ight:600; 
+            width:fit-content; text-align:center;
+        }
+        .footer { 
+            background:#f9f9f9; padding:28px 45px; font-size:13.5px; 
+            color:#666666; text-align:center; border-top:1px solid #eeeee=
+e;
+        }
+    </style>
+</head>
+<body>
+    <div class=3D"container">
+        
+        <div class=3D"header">
+            <h1>BOOKING CONFIRMATION</h1>
+            <p>Sofitel Dubai The Palm =E2=80=A2 Accor</p>
+        </div>
+
+        
+        <div class=3D"content">
+            <p class=3D"greeting">Hello,</p>
+            
+            <p>We are pleased to confirm your reservation at <strong>Sofi=
+tel Dubai The Palm</strong>, booked through accor.com.</p>
+
+            <table>
+                <tbody><tr>
+                    <td class=3D"label">Booking Reference</td>
+                    <td class=3D"value"><strong>ACCOR-7788991122</strong>=
+</td>
+                </tr>
+                <tr>
+                    <td class=3D"label">Check-in</td>
+                    <td class=3D"value"><strong>22 July 2026</strong> at =
+15:00</td>
+                </tr>
+                <tr>
+                    <td class=3D"label">Check-out</td>
+                    <td class=3D"value"><strong>26 July 2026</strong> at =
+12:00</td>
+                </tr>
+                <tr>
+                    <td class=3D"label">Room Type</td>
+                    <td class=3D"value">Prestige King Room with Palm View=
+</td>
+                </tr>
+                <tr>
+                    <td class=3D"label">Guests</td>
+                    <td class=3D"value">2 Adults =E2=80=A2 Breakfast Incl=
+uded</td>
+                </tr>
+            </tbody></table>
+
+            <table>
+                <tbody><tr>
+                    <td class=3D"label">Total Amount</td>
+                    <td class=3D"total">AED 6,850.00</td>
+                </tr>
+                <tr>
+                    <td class=3D"label">Payment Status</td>
+                    <td class=3D"value"><strong>Prepaid in Full</strong><=
+/td>
+                </tr>
+            </tbody></table>
+
+            <p style=3D"text-align:center;">
+                <a href=3D"https://zpr.io/RTeZsLih2ree" class=3D"button">=
+MANAGE MY BOOKING</a>
+            </p>
+
+            <p><strong>Important Note:</strong> Free cancellation is avai=
+lable until 17 July 2026.</p>
+
+            <p>We look forward to providing you with a memorable stay at =
+Sofitel Dubai The Palm.</p>
+
+            <p style=3D"margin-top:30px;">
+                Sincerely,<br><br>
+                The Guest Experience Team<br>
+                <strong>Sofitel Dubai The Palm</strong>
+            </p>
+        </div>
+
+        
+        <div class=3D"footer">
+            <p>
+                Palm Jumeirah, Dubai, United Arab Emirates<br>
+                Tel: +971 4 455 6677
+            </p>
+            <p style=3D"margin-top:15px;">
+                ALL =E2=80=94 Accor Live Limitless<br>
+                This is an automated confirmation email from Accor.
+            </p>
+        </div>
+    </div>
+
+<img src=3D"https://u3665674.ct.sendgrid.net/wf/open?upn=3Du001.B02Hzwd3k=
+uG-2BjSBbNXKM1DVG9iHj0CCaBFE46QW1Vf9biDKC2rdf3RpvdUSKsbDlcBdsiKhAoE5HL1-2=
+BTe7xnrItZMMkTGH3iQ2sLs9PGgBALG5jS81mNoF7-2BcYWD3pG038qYzzSl8A1V4pLtewMqG=
+SqMwiKnlSl827vufAaBOMdx1kRHrYhllIZP7N4zlDy07NiK-2B6Sne4DvLhhD07coOrlOIig1=
+5mM2R6ikOJzJRUX1rMLnsN-2FyrjpZmC10hyzmHHcY5PLmNLDNAaxdQpJmWxNbK8aMBTumseb=
+7cdhpNWXTQvIuLeE6PmUacZLa0h0GwSGgKPyzi7NwizyZzveezZYM7-2BH0wfm3l2GCmPXGu-=
+2FY-3D" alt=3D"" width=3D"1" height=3D"1" border=3D"0" style=3D"height:1p=
+x !important;width:1px !important;border-width:0 !important;margin-top:0 =
+!important;margin-bottom:0 !important;margin-right:0 !important;margin-le=
+ft:0 !important;padding-top:0 !important;padding-bottom:0 !important;padd=
+ing-right:0 !important;padding-left:0 !important;"/></body></html>
+
+----==_mimepart_6a0121788064_12825248237656949--
+
+----==_mimepart_6a01217880b7_1282524823765704a--
+

@@ -1,0 +1,14 @@
+# Offline core — minimal. Everything else is stdlib.
+pydantic>=2.0
+PyYAML>=6.0
+
+# Enrichment providers (only needed when you wire the real stages):
+# boto3                     # Stage 5 BedrockProvider (Claude, ap-southeast-1) — set PDAX_CONTENT_PROVIDER=bedrock
+# google-genai               # Stage 5 GeminiProvider (Google AI Studio) — set PDAX_CONTENT_PROVIDER=gemini
+#                             # NOTE: no region pinning, needs DPO sign-off under RA 10173 before real mail (see content_ai.py)
+# openai                     # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI Model Garden MaaS) — set PDAX_CONTENT_PROVIDER=glm
+#                             # NOTE: endpoint is locations/global (region-pinning unconfirmed) + third-party model provenance — see content_ai.py
+# google-auth                 # only if authenticating GLMProvider via a service-account credentials.json (PDAX_GLM_CREDENTIALS_PATH/GOOGLE_APPLICATION_CREDENTIALS) instead of a fixed PDAX_GLM_API_KEY
+# vt-py                     # Stage 7 VirusTotal client
+# httpx                     # Stage 3 live redirect-follow / cert inspection
+# dnstwist                  # gateway map_writer permutation generation

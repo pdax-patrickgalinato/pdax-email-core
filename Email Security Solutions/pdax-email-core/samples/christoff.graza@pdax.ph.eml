@@ -1,0 +1,262 @@
+Delivered-To: christoff.graza@pdax.ph
+Received: by 2002:a05:6674:484:b0:6f1:33ca:35dc with SMTP id ps4csp1197213pxc;
+        Fri, 12 Jun 2026 12:08:17 -0700 (PDT)
+X-Forwarded-Encrypted: i=4; AFNElJ8csMSvzm6obuznYD4Di8CGyo/CDwPZ1B1uVf/L6NqvObVdNNhWbGsls6+xpBmvixL5WEo92mS7dqx+wPEntX0=@pdax.ph
+X-Received: by 2002:a05:620a:4589:b0:90d:e71:8900 with SMTP id af79cd13be357-917ee4d93a1mr174687385a.10.1781291297226;
+        Fri, 12 Jun 2026 12:08:17 -0700 (PDT)
+ARC-Seal: i=3; a=rsa-sha256; t=1781291297; cv=pass;
+        d=google.com; s=arc-20240605;
+        b=T0C+Ujwvn2v1JChvWSIXCVLGWoGfONkF5XofMltw/s8qSheh71mnmnqsY01nq/nduc
+         nJ1arR9Q6EcPiAbedEd8Cb7ycjO3MjFbgyaxl+N1Xj++y+tJhJa59a7CKncnUEdkuF7o
+         jP9OUMk22V+7bLp9HyPGKTeqpr2Ck1McmKh9z3CCHIwww1+pN6yrCLkrxDo89djiw9bm
+         AbzrZxdGMS11g3VnIRCOe8dI2Z3PldOSGYjJCGt2WQf8dGTTqYhDh+SawEJvEQlAUFVH
+         9bMn9u5HDkA3kruHfaz6HaufTFTUeIunOqgExVt43my2gkb/FF6obvUEO44zXhNYkFIy
+         b/jg==
+ARC-Message-Signature: i=3; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=list-unsubscribe:list-archive:list-help:list-post:list-id
+         :mailing-list:precedence:date:mime-version:message-id:subject:to
+         :from;
+        bh=JhUxQZ935ikftIstneoWTXC28o7mpWWXT3k0ZiqRhSA=;
+        fh=NvCdqB02l0M8R2n8K1Ircb9aTCYTKGYdjdrUhgZmwVU=;
+        b=PI8QhUjd0YBo7EPlZZKPVR1X8gbdc6XEUfQjfzQxjg8ww6RyMYzphUUVOGglPt9nj1
+         qt+VwmpWM4BJeZsiPO2saK/R4GbtxLL6+DM+6dzkPAeVrNukpDUTPqk45pUKB76g0vaT
+         DZmyhfE6FEdYnNtGbZpWoWJDJcnMejYEGexHTDROairlcrY5hqgpgPIbu1sbBpVHvIsf
+         uVnAHW94ebGzZQQ9+PDHSRz/nyw7VT+UFXkawRkueMw8tDrX4DIHhaJmEZyOqRH21VXa
+         iqo4Kp4EptVZDWv+IccXwymu8UwvyxYXhKZ9ei2W2xi5hFBgblwpqsdFdSGgNenRVPWA
+         gG6w==;
+        dara=google.com
+ARC-Authentication-Results: i=3; mx.google.com;
+       arc=pass (i=2);
+       spf=pass (google.com: domain of careers+bncbdm5lao5qaobbgvswhiqmgqexe52cey@pdax.ph designates 18.208.22.143 as permitted sender) smtp.mailfrom=careers+bncBDM5LAO5QAOBBGVSWHIQMGQEXE52CEY@pdax.ph;
+       dara=fail header.i=@pdax.ph
+Return-Path: <careers+bncBDM5LAO5QAOBBGVSWHIQMGQEXE52CEY@pdax.ph>
+Received: from inpost.tmes.trendmicro.com (inpost.tmes.trendmicro.com. [18.208.22.114])
+        by mx.google.com with ESMTPS id af79cd13be357-9161a0781f6si340493585a.277.2026.06.12.12.08.16
+        for <christoff.graza@pdax.ph>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Fri, 12 Jun 2026 12:08:17 -0700 (PDT)
+Received-SPF: pass (google.com: domain of careers+bncbdm5lao5qaobbgvswhiqmgqexe52cey@pdax.ph designates 18.208.22.143 as permitted sender) client-ip=18.208.22.143;
+Authentication-Results: mx.google.com;
+       arc=pass (i=2);
+       spf=pass (google.com: domain of careers+bncbdm5lao5qaobbgvswhiqmgqexe52cey@pdax.ph designates 18.208.22.143 as permitted sender) smtp.mailfrom=careers+bncBDM5LAO5QAOBBGVSWHIQMGQEXE52CEY@pdax.ph;
+       dara=fail header.i=@pdax.ph
+Received: from 18.208.22.143_.trendmicro.com (unknown [192.168.191.214])
+	by inpost.tmes.trendmicro.com (Postfix) with SMTP id BE15210006A8B
+	for <christoff.graza@pdax.ph>; Fri, 12 Jun 2026 19:08:16 +0000 (UTC)
+X-TM-MAIL-RECEIVED-TIME: 1781291292.849000
+X-TM-MAIL-UUID: 827868b2-8558-48b2-b173-b3a4bb8e41a0
+Received: from repost01.tmes.trendmicro.com (unknown [18.208.22.143])
+	by inpre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id CF7F810000079
+	for <christoff.graza@pdax.ph>; Fri, 12 Jun 2026 19:08:12 +0000 (UTC)
+Received: from 74.125.82.69_.trendmicro.com (unknown [192.168.181.54])
+	by repost01.tmes.trendmicro.com (Postfix) with SMTP id B31C3100010E8
+	for <christoff.graza@pdax.ph>; Fri, 12 Jun 2026 19:08:12 +0000 (UTC)
+Received: from mail-dl1-f69.google.com (unknown [74.125.82.69])
+	by repre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id 796DA10000305
+	for <christoff.graza@pdax.ph>; Fri, 12 Jun 2026 19:08:11 +0000 (UTC)
+Received: by mail-dl1-f69.google.com with SMTP id a92af1059eb24-13825e1dc0dsf4727871c88.1
+        for <christoff.graza@pdax.ph>; Fri, 12 Jun 2026 12:08:11 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1781291290; cv=pass;
+        d=google.com; s=arc-20240605;
+        b=UeLBXI6UTmXfn/LUnKppFGpnKiBnJCMeK9b3NoyA1/RZIc+5MZgw2IasvAyk5poWnb
+         bTwlSO4cocI+hy2pGsCpU6q6jyY+lUS/DokSv0CEUmUmGs2f9e9DcqFIC8itO/Ve6MQy
+         X7DCoCejn10a2H72WtKx/J3bs7lq4ABK12cq/xws8ino21tLH8YKzs64jfTadjQao1lp
+         P5XtBD7k06VWf2s9lCaVf14j0WpLYaSSncJmcqdi+1sLPN4H3FeLEHbf4b2hlWcn1OcO
+         Sq+fmz6ZCwbz+1r5D5EMlnr/KJGW0F31pRt31D6lV4tHmfkxic9fmNHyy1NsV1IphNv/
+         eb+Q==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=list-unsubscribe:list-archive:list-help:list-post:list-id
+         :mailing-list:precedence:date:mime-version:message-id:subject:to
+         :from;
+        bh=JhUxQZ935ikftIstneoWTXC28o7mpWWXT3k0ZiqRhSA=;
+        fh=NvCdqB02l0M8R2n8K1Ircb9aTCYTKGYdjdrUhgZmwVU=;
+        b=aEkKEnxVSDSdfMu6UwfHuQ+Kpvy5mfMo3UIoX2/RKuNFW9UdLgu4GMxiZzp5+Eoj5i
+         mBJb0IiT9p4L4TITlruMEyUt8XmPd54dWvbbYhRVniQYuyY1cmh4+t3yx+MAcWxBxRC1
+         q0MJo6MH7F5HxvF4jNnqNiEPUpENmbvKPVuKLKqch64+Fkei6upoSil6krzYlLvcsqm5
+         QKmamwhsjPkVSHihcwUMF/7wHCe8266Ru7Q1FDJZxUfcVRQ3zPD2Nbpi330RqDi9nN2v
+         /dsh6JqnY/9j1gUzIHhgr6YJXyim/herRvvMR3S2mfrOAjF7bme/o45A4WlPkpOqE4Cp
+         BlUg==;
+        darn=pdax.ph
+ARC-Authentication-Results: i=2; mx.google.com;
+       gateway.spf=pass (google.com: domain pdax.ph configured 18.208.22.115 as internal address) smtp.mailfrom=workplace@pdax.ph smtp.remote-ip=18.208.22.115 policy.d=pdax.ph
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1781291290; x=1781896090;
+        h=list-unsubscribe:list-archive:list-help:list-post
+         :x-spam-checked-in-group:list-id:mailing-list:precedence
+         :x-original-authentication-results:x-original-sender:date
+         :mime-version:message-id:subject:to:from:x-beenthere:x-gm-gg
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=JhUxQZ935ikftIstneoWTXC28o7mpWWXT3k0ZiqRhSA=;
+        b=Ish2uh5SuCY4i5LPV0L3Ujcsdbqco6hp6dE3W1JxX27gNjPRUGgdJs7Op51m07UdRl
+         etawXuZg5VQSKH91+fejWYnBCEE8S0G8+/baUk4+mI8AkiblCZ/rg6cPCYQEKYm4dvHe
+         QCRsWT8YtT4+ivOcIhASuDaivmcR9d1dZq5XlutrtUyb64kddI5QK1IqqFoXoM6R4GZE
+         /QEbudbi2NZh6M6v3ZzjOAqbfeh3L7O+ATzbSH3om/fMfGSE6KK4WwR19n2TlA0GJ+yQ
+         cakU8HdXM4uvlybPO34TVACZvIuZ2RsE8PbwjCIz/HMxqo7x5t2T/GN6gGyy7VI+x4rF
+         y0jQ==
+X-Forwarded-Encrypted: i=2; AFNElJ+tsgwjnV12SILzymTVrglicaM8bFFN0eZoutAOfrDp6tRsrmnokEEIBBHVLt/rhQ+OjrI+ceeuCfp7lFh/ojU=@pdax.ph
+X-Gm-Message-State: AOJu0Yy6FB3DbjH9UXB3lxuUAg+ALXtXP1pVMyAHq2o8ZcBRgh2cSbZ2
+	8aH/4nY/rwUEuvaFcNuGcs/kdFTxQ7J03rcF/GUgIq0NOeKkUKHQXggqsM+SPYJ397hwDXR+xyu
+	a4ok4xol58PJv9++z7zTOcPq2th1oNxvm6VcQdpfTs6faaa+28Z68xJ+WlL0GS2tKLm+HWIf6hZ
+	u1Y5SnsZnITIE=
+X-Gm-Gg: Acq92OHgGLwJCYPn/XCBhoxb4ttB6fuXaivqTgtsqYz73sq4NJJl1VjaXB0EbrV8CUl
+	y63DA4kN8jWE8fuhHfzL9/HYYe6WYQiSM9+svUtEQ+c7ryggkIqb4SI5VSG+jH8TIHY6uJcMfgw
+	jYA24/QwwZUOxR75CYuQsh4R75eB3tTptLiSBtbkjmJczA0w==
+X-Received: by 2002:a05:7022:113:b0:12c:8e70:c33b with SMTP id a92af1059eb24-1386f234e27mr517544c88.8.1781291290680;
+        Fri, 12 Jun 2026 12:08:10 -0700 (PDT)
+X-Received: by 2002:a05:7022:113:b0:12c:8e70:c33b with SMTP id a92af1059eb24-1386f234e27mr517533c88.8.1781291290371;
+        Fri, 12 Jun 2026 12:08:10 -0700 (PDT)
+X-BeenThere: careers@pdax.ph; h="AX0PUUd1/lXgPcQepZ8cMlbPf3qaLQzleZW1ahNqpClvIv659w=="
+Received: by 2002:a05:7022:49c:b0:136:d006:d002 with SMTP id
+ a92af1059eb24-1384a172c4bls1570303c88.0.-pod-prod-05-us; Fri, 12 Jun 2026
+ 12:08:09 -0700 (PDT)
+X-Forwarded-Encrypted: i=2; AFNElJ+nsM1DQLaD6QTu4vJVlJmvrovix2OZ2fAN2yY/g2bxQZyxaUjjsUA+XEA9jVYQG+jtybUUL9w2@pdax.ph
+X-Received: by 2002:a05:7300:5720:b0:304:de2b:446f with SMTP id 5a478bee46e88-30940b0991dmr536210eec.28.1781291289256;
+        Fri, 12 Jun 2026 12:08:09 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1781291289; cv=none;
+        d=google.com; s=arc-20240605;
+        b=An5lzvZWOlhqJL0Mv+PXeUrP5zO9enX+vkD0mxbOBW3CuoEr+IouLZfKtlcse+TIcv
+         CL9/PbLPZWO7r330XKRsi9iiMTpPWXAkwqoq1iop8j3KbQFjoQtbHzLVj03nlEsy+Hyt
+         yIZ6zeNOPZQpTgMvYMoHNj/qZv0IrpLbFrloQwE5ULOvHsHj6gKmqTB772EK6HoVg8gk
+         BssYU7eyUG0mBmxx2DXm5iMMsAimRQl4rlbhTFztIBcXFaLTU4x++Xpiz2RHuzOsbsRE
+         5fob8YuetI/H7clcbvxg12/NdjDze3dGwyoq2wXLvXhMU7pNQTYMAmYoj4LX7jt7uLNc
+         T/Og==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=date:mime-version:message-id:subject:to:from;
+        bh=JhUxQZ935ikftIstneoWTXC28o7mpWWXT3k0ZiqRhSA=;
+        fh=Li2CFazbefMOkH2u9B4fNGilBpDE5F4+y99C+rHi1Bk=;
+        b=eNBtuuDspNF6bXQ0hxQp/jsKuIm8orTMPiqbln1eCRvTvbYG+seJ2YAhhYw4R5zPlL
+         VOdc86hK20NOBdJ+oDHXsIJ7/xGNoAiFqIEEw7k1mXxBL2fVdBwmw7/9TmJwN++HDCMg
+         pmP3fqGOFhubwBWEcW14QQkWi/IsmSjOD+CM+EMUUekP+vS+ba3MZIudar8hMQbjHOzB
+         SjiV0vuNas0A/vy8BmzZqDuNcvB0nQhJjUwk2IQ1qZWmjQ1NAi0yiv+SygtvMnDL3Tcz
+         N2gro4xZLIMmHE+np4oZx/6QK79dQnXeAJXxPtPF2OsRgOs/FzGAeZK5mr/gaigSA24k
+         gV5g==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       gateway.spf=pass (google.com: domain pdax.ph configured 18.208.22.115 as internal address) smtp.mailfrom=workplace@pdax.ph smtp.remote-ip=18.208.22.115 policy.d=pdax.ph
+Received: from inpost.tmes.trendmicro.com (inpost.tmes.trendmicro.com. [18.208.22.115])
+        by mx.google.com with ESMTPS id 5a478bee46e88-3081ef0132bsi10524810eec.57.2026.06.12.12.08.08
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Fri, 12 Jun 2026 12:08:09 -0700 (PDT)
+Received-SPF: pass (google.com: domain pdax.ph configured 18.208.22.115 as internal address)
+Received: from 0.0.0.0_.trendmicro.com (unknown [192.168.197.57])
+	by inpost.tmes.trendmicro.com (Postfix) with SMTP id 73D5A10028EF5;
+	Fri, 12 Jun 2026 19:08:07 +0000 (UTC)
+From: <workplace@pdax.ph>
+To: <workplace@pdax.ph>,
+	<careers@pdax.ph>
+Subject: =?UTF-8?B?RW1haWwgcXVhcmFudGluZWQ=?=
+X-TM-LOOP-PREVENTION: eyJuIjp7InMiOiJjMTk1ZTcxOWUwYWJmYmY0NTA1M2JjMDhkNzc5NT
+	I4MjU5MzdkZWIwIiwiYyI6IjIzOGY5NTcxLTdiYmEtNDRiZi05MzkwLTRiZjgyZDhhMjY2NCJ9f
+	Q==
+Message-ID: <9d373ffd-e10a-4e87-a6c2-06bb5f3e29ad@tmes.trendmicro.com>
+Content-Type: multipart/mixed;
+	boundary="TMMSG_37669131_5D63_E737_9128_D56A85E4575B"
+MIME-Version: 1.0
+Date: Fri, 12 Jun 2026 19:08:07 +0000 (UTC)
+X-Original-Sender: workplace@pdax.ph
+X-Original-Authentication-Results: mx.google.com;       gateway.spf=pass
+ (google.com: domain pdax.ph configured 18.208.22.115 as internal address)
+ smtp.mailfrom=workplace@pdax.ph smtp.remote-ip=18.208.22.115 policy.d=pdax.ph
+Precedence: list
+Mailing-list: list careers@pdax.ph; contact careers+owners@pdax.ph
+List-ID: <careers.pdax.ph>
+X-Spam-Checked-In-Group: careers@pdax.ph
+X-Google-Group-Id: 427530304261
+List-Post: <https://groups.google.com/a/pdax.ph/group/careers/post>, <mailto:careers@pdax.ph>
+List-Help: <https://support.google.com/a/pdax.ph/bin/topic.py?topic=25838>, <mailto:careers+help@pdax.ph>
+List-Archive: <https://groups.google.com/a/pdax.ph/group/careers/>
+List-Unsubscribe: <mailto:googlegroups-manage+427530304261+unsubscribe@googlegroups.com>,
+ <https://groups.google.com/a/pdax.ph/group/careers/subscribe>
+X-TM-AS-ERS: 18.208.22.143-127.5.21.1
+X-TMASE-Version: StarCloud-1.3-9.2.1014-30004.000
+X-TMASE-Result: 10--11.467200-10.000000
+X-TMASE-MatchedRID: 96saCb4bKy7GE3RaC90HLpOCyMF3fA3/c9mfC5pWfrDCF943U6Vs8QZ6
+	XA3F3yQvN6Ln3pZIO81rzRlxpMrS/BPfEKcPjGWSv/N6UlTxt2tmT70SheKzhLadlnvTZac+hvI
+	S1xJSJBgCVAcFBREIHlrnBGaGznk0lzTGew21KsMjX0IkaZrKuuwCJ+YcdeCaVR8PYwSrJ/fwtb
+	ToFLuHdMdJZ7XICQ3noSymbNaqh68G9lZTeUCg3yssHWC476Z/b/g7FkR+c4X6GCyINltFUJLww
+	1qy28JzUHt4M+6Nfxy1hWyjF2ayxC6PybHKNLpti4AljdeUCNB1k+Zk572e7HTu4Mmas59biDzg
+	8yW5ZVC+2acKtfdmATmoMBkrmuf/mCYM4MaoFU8mx8kl1Wnd+q+eCSMeOiOkfZ9uentPYeZhXJF
+	XhxUgBImPw9Q8D9fkJPlTeUnhPwpWk+R3CW0+FImRx7OV7pazMPUkrdwrqe98/QXUMJC/AiSH6N
+	R3WA+kiwAyD/hxCLyKvpFqp0OEvhSaPPXmjIXOyQ8LC6QS1tgOpOLYsVgyf52N97tQs+ml
+X-TMASE-XGENCLOUD: 4b028550-c4e3-4c9b-bc71-ca7a2e642038-0-0-200-0
+X-TM-Deliver-Signature: F3E8462063A2880DBFC230F6D9136834
+X-TM-Addin-Auth: a9TX0wxA2XivcRceJni5r3G5knEbb+iVcAIfvYZ7ty08sebPr45HLZ4PHZH
+	eTCRAN3FKh5ftHRATf+ck1okhukD5clMQYihaRtxvsF23tyIVTykZ7INkgkhdYcJQjAV5WEJEjX
+	LM8GOPJyGKL31C+OHPxXw6SxxoEb9OlpBiZ3xpBZzKCZ0cws7PzYhR0FsL9d+eM7Tm9JJ8efy77
+	q84y6GA47Z3pk3IFGMOUPtobYY2m2ShBWi65IaAK8cvyyikC7pNvrMxyjh84Fr40e4d5Ai1VNmw
+	jPHZlIP+v2I6kkPRfvhNknBINUXiTKay4GY+.JMTE0zIhPgzTeYi4i9FafHp4810QbWuNqYOGYu
+	2LDaPZE2JmD0q58tHdsKh1rQix8aVI4yk41RDhkLV/81c6o1Nbq6OLhBoK9QwXmX0qTvlTfFej+
+	aRQCpBfGnHgmd7KY1cJIlqcSbnnCWOEZwbnl0bgSYFJM+ljl5sdoiPrhVXlNvHVUS6gHhVzXtpy
+	rTgKYaQzzaVUNdHhnbdSW/FdbfwCm1asJvbjbb5tAeBx7+pD6+P96u7dulQUeEFD4croBz6BJpw
+	YWKTqiPRUu4usHuBMJmgx0BertEWs9nTiYumWAmF3ZW7KjKOchBdRiFBFSGFsWSpkHEyI9Et+88
+	pw9w==
+X-TM-Addin-ProductCode: EMS
+X-TM-Received-SPF: Pass (domain of 
+	careers+bncBDM5LAO5QAOBBGVSWHIQMGQEXE52CEY@pdax.ph designates 
+	18.208.22.143 as permitted sender) client-ip=18.208.22.143; 
+	envelope-from=careers+bncBDM5LAO5QAOBBGVSWHIQMGQEXE52CEY@pdax.ph; 
+	helo=repost01.tmes.trendmicro.com
+X-TM-Authentication-Results: spf=pass (sender IP address: 18.208.22.143) 
+	smtp.mailfrom=pdax.ph; dkim=none (no processed signatures) header.d=none; 
+	dmarc=pass action=none header.from=pdax.ph; arc=none
+X-TMASE-SNAP-Result: 1.821001.0001-0-1-5:1,22:0,28:1,33:0,34:0-0
+X-TM-RISKAI-PTN-VERSION: 1.24.0+20260611.ff0a078
+X-TM-RISKAI-MATCHEDFID: WyJGSUwwMjIiLCAiRklMMDI5IiwgIkZJTDAzMyIsICJGSUwwMzci
+	LCAiRklMMDc0IiwgIkZJTDA3NyIsICJGSUwwNzgiLCAiRklMMDgwIiwgIkZJTDA4MU4iLCAiRkl
+	MMDg3IiwgIkZJTDA5OCIsICJGSUwxMzciLCAiRklMMTk3IiwgIkZJTDE5OCIsICJGSUwxOTkiLC
+	AiRklMMzA5Il0=
+
+This is a multi-part message in MIME format.
+
+
+--TMMSG_37669131_5D63_E737_9128_D56A85E4575B
+Content-Type: multipart/alternative;
+	boundary="TMMSG_5499925A_1309_5466_FAB2_BC24185FA879"
+MIME-Version: 1.0
+
+This is a multi-part message in MIME format.
+
+
+--TMMSG_5499925A_1309_5466_FAB2_BC24185FA879
+Content-Type: text/plain;
+	charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+QW4gZW1haWwgc2VudCB0byB5b3UgaGFzIGJlZW4gcGxhY2VkIGluIHF1YXJhbnRpbmUu
+
+--TMMSG_5499925A_1309_5466_FAB2_BC24185FA879
+Content-Type: text/html;
+	charset="UTF-8"
+Content-Transfer-Encoding: base64
+
+IDxodG1sPgogIDxoZWFkPgogICAgPG1ldGEgY2hhcnNldD0idXRmLTgiPgogICAgPHRpdGxlPnsl
+TUFJTF9TVUJKRUNUJX08L3RpdGxlPgogIDwvaGVhZD4KICA8Ym9keSBzdHlsZT0ibWFyZ2luOiAw
+OyI+CiAgCTx0YWJsZSBib3JkZXI9IjAiIGNlbGxzcGFjaW5nPSIwIiBjZWxscGFkZGluZz0iMCIg
+d2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgYmdjb2xvcj0iI2YyZjJmMiI+CiAgCQk8dHI+CiAg
+CQkJPHRkIHZhbGlnbj0idG9wIiBzdHlsZT0icGFkZGluZzogMzBweCAwOyI+CiAJCQkJPHRhYmxl
+IHdpZHRoPSAiNjAwIiBhbGlnbj0iY2VudGVyIiBjZWxsc3BhY2luZz0iMCIgY2VsbHBhZGRpbmc9
+IjAiPgogCQkJCQk8dHI+CiAJCQkJCQk8dGQ+CiAJCQkJCQkJPHRhYmxlIGJvcmRlcj0iMCIgY2Vs
+bHNwYWNpbmc9IjAiIGNlbGxwYWRkaW5nPSIwIiBzdHlsZT0id2lkdGg6MTAwJTsgYmFja2dyb3Vu
+ZC1jb2xvcjogI0ZGRjsgY29sb3I6ICMwMDA7Ij4KIAk8dHI+CiAJCTx0ZCBzdHlsZT0iYmFja2dy
+b3VuZC1jb2xvcjojMWU1ZWRlOyBoZWlnaHQ6IDRweDsiIGhlaWdodD0gIjQiIGJnY29sb3I9IiMx
+ZTVlZGUiPjwvdGQ+CiAJPC90cj4KIAk8dHI+CiAJCTx0ZCBzdHlsZT0iYm9yZGVyOiAxcHggc29s
+aWQgI2UwZTBlMDsgcGFkZGluZzogMWVtIDFlbTt3b3JkLWJyZWFrOiBicmVhay1hbGw7IiB3aWR0
+aD0iMTAwJSI+CQogCQkJPHAgc3R5bGU9InBhZGRpbmctYm90dG9tOiAxZW0iIGFsaWduPSJjZW50
+ZXIiPgogCQkJCTxpbWcgc3JjPSJodHRwczovL3VpLnRtZXMudHJlbmRtaWNyby5jb20vc3RhdGlj
+L3NlbS90bWVzL2ltYWdlcy9ub3RpY2VfaW5mby5wbmciIHN0eWxlPSJ3aWR0aDozNnB4O2hlaWdo
+dDozNnB4OyIgd2lkdGg9IjM2IiBoZWlnaHQ9IjM2Ii8+CiAJCQk8L3A+CiAJCQk8cCBpZD0ibm90
+aWZpY2F0aW9uX3ByZWRlZmluZWRfcmljaF90ZXh0X2VkaXRvcl9jb250ZW50Ij4KCQkJCTxwPkFu
+IGVtYWlsIHNlbnQgdG8geW91IGhhcyBiZWVuIHBsYWNlZCBpbiBxdWFyYW50aW5lLjwvcD4KPHA+
+U2VuZGVyOiBoZWxsb0BldG9pbGVjb2xsZWN0aXZlLmNvbS5hdTwvcD4KPHA+UmVjaXBpZW50czog
+Y2FyZWVyc0BwZGF4LnBoPC9wPgo8cD5FbWFpbCBTdWJqZWN0OiBEaWdpdGFsIEFzc2V0IFRyYW5z
+YWN0aW9uIFJlY29yZHMgZm9yIFRheCBBdWRpdCA3OTAzODwvcD4KPHA+RGF0ZSAmYW1wOyBUaW1l
+IG9mIGRlbGl2ZXJ5OiBGcmkgSnVuIDEyIDE5OjA3OjQ0IDIwMjY8L3A+CjxwPlJ1bGUgTmFtZSBU
+cmlnZ2VyZWQ6IHBkYXg6IE9yZ2FuaXphdGlvbjogU3BhbSBvciBQaGlzaDwvcD4KPHA+Jm5ic3A7
+PC9wPgogCQkJPC9wPgogCQk8L3RkPgogCTwvdHI+CiA8L3RhYmxlPgogCQkJCQkJPC90ZD4KIAkJ
+CQkJPC90cj4KIAkJCQk8L3RhYmxlPgogIAkJCTwvdGQ+CiAgCQk8L3RyPgogIAk8L3RhYmxlPgog
+IDwvYm9keT4KICA8L2h0bWw+
+
+--TMMSG_5499925A_1309_5466_FAB2_BC24185FA879--
+
+--TMMSG_37669131_5D63_E737_9128_D56A85E4575B--
+

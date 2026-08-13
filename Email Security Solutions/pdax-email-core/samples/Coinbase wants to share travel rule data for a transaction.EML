@@ -1,0 +1,508 @@
+Delivered-To: patricia.malindog@pdax.ph
+Received: by 2002:a05:651c:f:b0:38a:867d:789e with SMTP id n15csp1383373lja;
+        Mon, 6 Apr 2026 21:56:28 -0700 (PDT)
+X-Forwarded-Encrypted: i=4; AJvYcCWNiFW7xmkEvc8A+Tjai/OM2dOnItbGf8jQn1fiyPfMJ/cUWUIlmW/41ZK9QPnpwIE3KWccOxDW98pW0+cOiz/91A==@pdax.ph
+X-Received: by 2002:a05:6000:18a9:b0:43b:5097:6f62 with SMTP id ffacd0b85a97d-43d292e88e7mr20614271f8f.36.1775537788440;
+        Mon, 06 Apr 2026 21:56:28 -0700 (PDT)
+ARC-Seal: i=3; a=rsa-sha256; t=1775537788; cv=pass;
+        d=google.com; s=arc-20240605;
+        b=Z8Bjp9U0F19Gjg0XItmc9O4HomSJG0h9RLeyghlLs+berd+wU8CNyeEygBImmWIXZ1
+         EVNvH9BNVNOKW6guAziQefYtvM0UG/7e27Rj6Cz7CR4CXtwZfIL1zZrGy3wRNj/iHFZg
+         z+zrO0bpOJ7zYUGCMg9MnVimhI4WjzcghA5uhEcaFSNvqfDMygbtG+hF8IDOWLf5HeRd
+         YWPJEhZJB1bH1zimH1bqNH6EGyFkdxgEyK4KCevRpZQildOl8oiLEvOkAfHlC6SKGoGm
+         C3P3FCyggOdpuEtGh6HbU1dfZmoRbHhq1gQ8pKySMAMhpwoYHuRkuX78El3kHtvWq4Cv
+         YmdA==
+ARC-Message-Signature: i=3; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=list-unsubscribe:list-archive:list-help:list-post:list-id
+         :mailing-list:precedence:reply-to:feedback-id:date:message-id
+         :mime-version:subject:to:from:dkim-signature;
+        bh=H8R+imDoch0aBG/XptH9ldBchrg5p0/Sl0ZVA+erJIg=;
+        fh=1tW7RnYCoU8HXPsKZOhzPo+dU/qPnshFQxxR8rq72B4=;
+        b=aU3269vVER2W+tym6VBtBUBo+Sts/Hs5TdxjEpLLE+y99bdr5pSjx4LBhWfyxumGVa
+         KIgxiE67WlKcqYM9iHrhAX8Ffb6VT/iMDW0sRnmGdW4tFY+XV9LckxuYFbRaF+OuPje6
+         t5ZBACy2L2oZAVqrGINS3ElnyEgaeAzwpKvLKIKzZHoluY5keqkNKInbMYPzA9CEiUuq
+         yMuO5h6vWNedWy5NhqC8gWdr3i6WUDU6DBz729Tq/O/JOROTDKGohFBG4l9foysht1OH
+         KWUQ0zXIaMfdjIyo8PCF4X8y4x5wJoD7G2DVVyvBTaa6DkVpsWr7d6nCJCABNMMR+RID
+         Bwew==;
+        dara=google.com
+ARC-Authentication-Results: i=3; mx.google.com;
+       dkim=pass header.i=@pdax.ph header.s=google header.b=VknWp4Ak;
+       arc=pass (i=2 spf=pass spfdomain=amazonses.com);
+       spf=pass (google.com: domain of compliance+bncbcpjpipj4uhrb5m42lhamgqeb52mn6a@pdax.ph designates 18.208.22.130 as permitted sender) smtp.mailfrom=compliance+bncBCPJPIPJ4UHRB5M42LHAMGQEB52MN6A@pdax.ph;
+       dara=fail header.i=@pdax.ph
+Return-Path: <compliance+bncBCPJPIPJ4UHRB5M42LHAMGQEB52MN6A@pdax.ph>
+Received: from inpost.tmes.trendmicro.com (inpost.tmes.trendmicro.com. [18.208.22.115])
+        by mx.google.com with ESMTPS id ffacd0b85a97d-43d1e2b2ca9si31088232f8f.71.2026.04.06.21.56.28
+        for <patricia.malindog@pdax.ph>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 06 Apr 2026 21:56:28 -0700 (PDT)
+Received-SPF: pass (google.com: domain of compliance+bncbcpjpipj4uhrb5m42lhamgqeb52mn6a@pdax.ph designates 18.208.22.130 as permitted sender) client-ip=18.208.22.130;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@pdax.ph header.s=google header.b=VknWp4Ak;
+       arc=pass (i=2 spf=pass spfdomain=amazonses.com);
+       spf=pass (google.com: domain of compliance+bncbcpjpipj4uhrb5m42lhamgqeb52mn6a@pdax.ph designates 18.208.22.130 as permitted sender) smtp.mailfrom=compliance+bncBCPJPIPJ4UHRB5M42LHAMGQEB52MN6A@pdax.ph;
+       dara=fail header.i=@pdax.ph
+Received: from 18.208.22.130_.trendmicro.com (unknown [192.168.185.223])
+	by inpost.tmes.trendmicro.com (Postfix) with SMTP id 5EFFA10000417
+	for <patricia.malindog@pdax.ph>; Tue, 07 Apr 2026 04:56:27 +0000 (UTC)
+X-TM-MAIL-RECEIVED-TIME: 1775537786.796000
+X-TM-MAIL-UUID: 9095a1d3-8816-4773-87e2-f0ccb996e90c
+Received: from repost01.tmes.trendmicro.com (unknown [18.208.22.130])
+	by inpre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id C2A08100002FA
+	for <patricia.malindog@pdax.ph>; Tue, 07 Apr 2026 04:56:26 +0000 (UTC)
+Received: from 74.125.82.69_.trendmicro.com (unknown [192.168.168.133])
+	by repost01.tmes.trendmicro.com (Postfix) with SMTP id AFCBE1000153D
+	for <patricia.malindog@pdax.ph>; Tue, 07 Apr 2026 04:56:26 +0000 (UTC)
+Received: from mail-dl1-f69.google.com (unknown [74.125.82.69])
+	by repre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id 572A01001A51E
+	for <patricia.malindog@pdax.ph>; Tue, 07 Apr 2026 04:56:23 +0000 (UTC)
+Received: by mail-dl1-f69.google.com with SMTP id a92af1059eb24-12721cd1a2asf30107723c88.1
+        for <patricia.malindog@pdax.ph>; Mon, 06 Apr 2026 21:56:23 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1775537782; cv=pass;
+        d=google.com; s=arc-20240605;
+        b=H1LaSU4s+ec/6j6tEYyOdkEh0cFqvaHTnYOu/28oLSBJLQvIbzdSEzmNx0oZOQev8u
+         2hKkl6ulsjwzPO01HWgScuH+JhwPn2pRT6bXv266HnjdfC52wScchZT9NKAzontvComJ
+         hAfI5tB3VBmtSmsU/dnpeYmtB5lH8mtjun5PZnS/hJdTlKGqZSgfa86oPJtZuFekV86v
+         g2f2pYY91MyC6RYY+DHI+Za7P2yX1xhF6Kelx4whOkg04OlM8mXqYJYEOR2HKrC2pstD
+         6OO18NpXWq092JvUNs/MtUzuTPma5Jo1tukgWbUlDj5TD3hJFEltHIfT36WUWAhJ9XMS
+         6EQw==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=list-unsubscribe:list-archive:list-help:list-post:list-id
+         :mailing-list:precedence:reply-to:feedback-id:date:message-id
+         :mime-version:subject:to:from:dkim-signature;
+        bh=H8R+imDoch0aBG/XptH9ldBchrg5p0/Sl0ZVA+erJIg=;
+        fh=1tW7RnYCoU8HXPsKZOhzPo+dU/qPnshFQxxR8rq72B4=;
+        b=XJsQaPg0xHcAjcpqo946w2HgfkSQuygAHnjcmpexIb0m30B8aDeKqx687UATKiR0E1
+         K1vNVsOh5NRAlVsAha8aAjSh3EvpmAKjWYGoUkzwalVJwp5fxZsv6y9Kaa/PTLS2WUjy
+         F2S5j+IW9WZNL9q78jXwb/ZxwBDDbfRl7cWbrt6NVHIbgCkRoWN0vfC//KPA+sefC2oo
+         4c1MvEKzgyIhOkt5fr+P3GgDY1MMeNDiyL/nV5cQXi0isrHNjxrGN0GqiIK/zzjqjy58
+         NLsxBLKVbV0W/ukeUjEjFa3MpLlmomtYEpNNyucXXnneloHPVEJEAQAokBOD5rgam3aD
+         vzbA==;
+        darn=pdax.ph
+ARC-Authentication-Results: i=2; mx.google.com;
+       dkim=neutral (body hash did not verify) header.i=@info.coinbase.com header.s=xmk7xv4dzq3ad3l3wrpegkiqkegm4nst header.b=O2ykBJFI;
+       dkim=neutral (body hash did not verify) header.i=@amazonses.com header.s=224i4yxa5dv7c2xz3womw6peuasteono header.b=BT8wDLqN;
+       spf=pass (google.com: domain of 0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com designates 76.223.142.137 as permitted sender) smtp.mailfrom=0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=pdax.ph; s=google; t=1775537782; x=1776142582; darn=pdax.ph;
+        h=list-unsubscribe:list-archive:list-help:list-post:list-id
+         :mailing-list:precedence:reply-to:x-original-authentication-results
+         :x-original-sender:feedback-id:date:message-id:mime-version:subject
+         :to:from:from:to:cc:subject:date:message-id:reply-to;
+        bh=H8R+imDoch0aBG/XptH9ldBchrg5p0/Sl0ZVA+erJIg=;
+        b=VknWp4AkX8U2bY6FwNmE99Ry3wCdTS12oNZkwDQoDA9AlvNVhQFYvViVFWwG+/G7qV
+         vCmcG6z4V34lXqSkDb9vXMhZhA6Tph7PbDb7GvkU68UCP+t8kFf+a9fIT4hS15uyDMTu
+         HgZkRQ5VbJhMny2RKo1zIA2kfI3fV0Ebvn56Q=
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1775537782; x=1776142582;
+        h=list-unsubscribe:list-archive:list-help:list-post
+         :x-spam-checked-in-group:list-id:mailing-list:precedence:reply-to
+         :x-original-authentication-results:x-original-sender:feedback-id
+         :date:message-id:mime-version:subject:to:from:x-beenthere:x-gm-gg
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=H8R+imDoch0aBG/XptH9ldBchrg5p0/Sl0ZVA+erJIg=;
+        b=JLFrtE5sB0a+ysj6qgHGJ/vei8T6+I+qWyxhdhdtl+XGOTsKrjDFcconl202AMlkQA
+         PCrFyo/bHElp6Uw2hKyGg0/1JA/i2CGeiWGohEYqIZeNRiB2K2PC94M95iG8Jysw3MWK
+         L/D2Ec+HX7I7xjbkbyTotIPYg/ElZBZQO+3tWzfUmgyvTqzCbjNT/fuqu6nsG7yUiyTX
+         a7n08Ges3lZwfR/MVX5aF9URD7ix++0WLYz6hrHNjllrbWSK9J6t8Vxrus6RuM1FY1n7
+         6c8i1/3ILopzG+PIySv+0PLWWE2E0QHv9XAPFWu0XbeTH/AkEfQ01CaTck1eDiwBqqJJ
+         5y0g==
+X-Forwarded-Encrypted: i=2; AJvYcCUMaUFSRR0ekMcu8zU4DpzadOaxFGf8r9LYWEmcC4SwYpBwzmNcbOKbb9yMPGPdWWbBPwAM14bXytIXuJMO13Q38Q==@pdax.ph
+X-Gm-Message-State: AOJu0YwbbGgI0NMy8dvezgEIY333T5ZznTUBZFxmAiX6vWLzAhDMdLHd
+	er2HAB6N3PSg/0cBzaXQbmEtw2QILCeP/s/ok/U97qerujgTfkl6eVmAaLF2H9b5A104OX7GT2/
+	1hASwqbtOkBSC6n8SG82cPpJCvR/4raNiiNEF0ewB6wWuf5ixbKgI7pE27rCJjolSY27v6MnLqE
+	a0N5rhEhiTquF9ADzq9uOIew==
+X-Gm-Gg: AeBDieuEFSgyBjoDBsS9vPR6hvsMw0wBuQnMXBzdJY+ZwqUH/SO0vatXaqvKq1cdo2p
+	M6pIBS0/pFZHelK5u/ks8emesXt+7G3ql+NccbA8fZxMYwiqqlpkWseVyMGNapqSfaGqJAI/5Im
+	ZA48uiN6O2XlPeJSuA4c5r0MA36QbTihA3zr6I4i632Zmg2w==
+X-Received: by 2002:a05:7022:6097:b0:119:e56b:c75c with SMTP id a92af1059eb24-12bfb76a3dbmr8000270c88.33.1775537782484;
+        Mon, 06 Apr 2026 21:56:22 -0700 (PDT)
+X-Received: by 2002:a05:7022:6097:b0:119:e56b:c75c with SMTP id a92af1059eb24-12bfb76a3dbmr8000249c88.33.1775537782000;
+        Mon, 06 Apr 2026 21:56:22 -0700 (PDT)
+X-BeenThere: compliance@pdax.ph; h="AYAyTiKyxy9s9nSmesIEhcgyQuw7TjHGtwMnJ/XacHOXczeZ1A=="
+Received: by 2002:a05:7022:418b:b0:128:db5f:9aad with SMTP id
+ a92af1059eb24-12beeb261c9ls3865099c88.1.-pod-prod-08-us; Mon, 06 Apr 2026
+ 21:56:21 -0700 (PDT)
+X-Received: by 2002:a05:7022:ea31:b0:128:ce44:be8f with SMTP id a92af1059eb24-12bfb6e980bmr7349787c88.2.1775537780916;
+        Mon, 06 Apr 2026 21:56:20 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1775537780; cv=none;
+        d=google.com; s=arc-20240605;
+        b=LpYhxjwWYDoESTzVRatn8ymUP236U/0CkGsGrQvtgBh7ACG9L7an9u4+iWU3ywB593
+         k+MhFSHvNHcQn8KEOmD9l/R4PpJItCAuKO19fM/5RxOSXVG6gmxhvRM388G11KuhEo29
+         YsLExdBGlGQ3KiDujmmTNIgx9kt0+FQv5ppDuWDPtiB7JqG4VrcFoovZ/pY0Qfq1j90R
+         s7PVW2wfp0zZXNR/qBUDSQl1EbfrtRSADIlLyHLwHTCabSqQoAU6MTRuveyXziwIOEwW
+         DHVlEukjiWxCjUh2wA3fZxRFp5WWUPd21+BImUF7d6MxuTVsBTzQ57MCGUJQ/pG5ZgqZ
+         F5CA==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=feedback-id:date:message-id:mime-version:subject:to:from
+         :dkim-signature:dkim-signature;
+        bh=H8R+imDoch0aBG/XptH9ldBchrg5p0/Sl0ZVA+erJIg=;
+        fh=gdiDBxWJo8gYTRXuYKmNkBtOFV3SPJvRYH4sJbWOjrw=;
+        b=UZR19ScCRdmj6jknyciffwb6aq3AQ9U1nmMzp0AuI5W+8rtJyJXki+hV7rUs/1uUwc
+         2FBWTvt8g/NUgo2C0Nk1JcCwzFfKJX7j3zYIMPzMlAq4fyhv3YAfUUNLrfcSOBHOcfxI
+         RCYPaR7ClNpj/I9+21266atOyVHqrw8uogRJ4Qq9FH9TfFjMI9xAajyMF5z2wHud5OKg
+         35PKUWc6dOH8P4zVJXI+KGaUHC9axBIZO43HEWxhpQh5w2YHat05b8MAke31C9DJjt5t
+         zBtQRWNngymlSDroWwj7/tsPwX1n6PhtUlx7XQf/CBQG/2xcbIHV/cziZ47igMWDLrEM
+         kuIw==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=neutral (body hash did not verify) header.i=@info.coinbase.com header.s=xmk7xv4dzq3ad3l3wrpegkiqkegm4nst header.b=O2ykBJFI;
+       dkim=neutral (body hash did not verify) header.i=@amazonses.com header.s=224i4yxa5dv7c2xz3womw6peuasteono header.b=BT8wDLqN;
+       spf=pass (google.com: domain of 0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com designates 76.223.142.137 as permitted sender) smtp.mailfrom=0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com
+Received: from inpost.tmes.trendmicro.com (inpost.tmes.trendmicro.com. [18.208.22.114])
+        by mx.google.com with ESMTPS id a92af1059eb24-12c0f7ac024si15305435c88.34.2026.04.06.21.56.20
+        for <compliance@pdax.ph>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 06 Apr 2026 21:56:20 -0700 (PDT)
+Received-SPF: pass (google.com: domain of 0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com designates 76.223.142.137 as permitted sender) client-ip=76.223.142.137;
+Received: from 76.223.142.137_.trendmicro.com (unknown [192.168.206.108])
+	by inpost.tmes.trendmicro.com (Postfix) with SMTP id 059EC10000413
+	for <compliance@pdax.ph>; Tue, 07 Apr 2026 04:56:19 +0000 (UTC)
+Received: from c142-137.smtp-out.amazonses.com (unknown [76.223.142.137])
+	by inpre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id 1E70110001E1F
+	for <compliance@pdax.ph>; Tue, 07 Apr 2026 04:56:17 +0000 (UTC)
+From: "'Coinbase' via Compliance" <compliance@pdax.ph>
+To: compliance@pdax.ph
+Subject: Coinbase wants to share travel rule data for a transaction
+MIME-Version: 1.0
+Content-Type: multipart/alternative; 
+	boundary="----=_Part_808294_691622255.1775537776734"
+Message-ID: <0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@email.amazonses.com>
+Date: Tue, 7 Apr 2026 04:56:16 +0000
+Feedback-ID: ::1.us-east-1.7Dy6Wv5AnFh3NYaKlrCFnhqGApXC3QfI6g+8Wv9I+w8=:AmazonSES
+X-SES-Outgoing: 2026.04.07-76.223.142.137
+X-TM-AS-ERS: 18.208.22.130-127.5.21.1
+X-TMASE-Version: StarCloud-1.3-9.2.1012-29864.005
+X-TMASE-Result: 10--17.789300-10.000000
+X-TMASE-MatchedRID: KxrMY5blxgIqUmvvvgCrwA1R35SFwuG0aps/EoPWap97lkD1//Hp9Nt4
+	SKB/NQHR17jTxCrTO0JQ01JVJfRxjf9f9hQdUF3Po6OOE41ezWnFzfas4ZdWHFrnBGaGznk0TU4
+	2RVciesg++N18E/f3GbBOUaWPxmemrZLPoWdXjQ9R95PsA75qdjvsaOxlRrl9JO58QVRaY2cp6r
+	tItBU/PuDVJbSehGaCGvEDRhmpGddHAtxCwgfHji2gOYmvQwpbXJgb+CYXrh4C4nX+uWzTl9gHu
+	HRCZu5NnCajKJzJSTjLrMUa9s0JagHclVVehs8tuvT2bl4+ajJMuF2RzgjgNte6PFd3NjH8MlYH
+	irgfM3KL5mNYRNlQ1LMP25Q84eqmAkCb7ATwm2R28PYGqb4BvYkLTJn9ord4YzClpEj0Y6UrGV7
+	3AsU0Z3wbAs168QsFbK64C185JQaVAUX+sWsgAgXu5jD0s77JL9IxZwfqAM4JZ2Q97L+53c9aLC
+	a+VyhPnwAleZkho2PGnjwsFJOdSGtRaUEA8wWDSYcg0JTkvbqMG3Fik8fRzzj56eDrtcCeyZbgs
+	ItOjuTvlRyXIKpeUw0rbqrYQYCR3moAA5trTn6aLsrAF2yGQx5Vlw5q1pCdFJhPU83Ff2XwdBJZ
+	v0y7hezRkUgjCvmzWpXT1C2uwECJgkiifN7tXNVVoX2bTSXHuKrp6bbokRFWQe5B5I6pZKOIgmp
+	EUTFNH3J/pZ2f8Yo4Exmvb/S9jVpgG3MzievjHDjQJqZAs1+Cr+VR4etsNvQu6ZqDKgUEuQY0/M
+	MesjBv8x/gekDHg90UBM5NMv4nDjdBvGLFPTOqidLUiUZwVn3ehwM//IdIES46qCSbf/WHvP6CY
+	oqPSgN/ojyMXH62anZVdS5mxHyOg2n/Se7bCS3wkQehsMOlbfud/iI5gMBWPx536TZMQGm0BZNS
+	vVpxf1EGTVRugFZiyuQOZndK/bpcTKsMs1ZRW62kZbnrZYTpAuB7xNymfQ==
+X-TMASE-SNAP-Result: 1.821001.0001-0-1-22:0,28:1,30:1,33:0,34:0,42:1-0
+X-TMASE-XGENCLOUD: 6b6c6cb5-b37d-4b27-8048-e588fd980706-0-0-200-0
+X-TM-Addin-Auth: dmxt75/J0h0w51YQRM0QE2S36BIBPsTctgOFIcmnaOd21OO/Le2NQrvK5tm
+	rZoRjvvPoLhfBnxxQ1DTm4qa71jAnZ2f54KxbxkeDeZhkvV8SeUlWWQ19r0QBoSMaOEDwOKxqlj
+	OhVo2YYf3QlZrOtdydTrJRHtzYiog9vVdNqUttIm9fpAwXs+GaSUAX1J63b/iyFTmIQh/RzXhe+
+	/ay4KMdBL5n/5KAbRGlQLtE80QsJ0UoKipj+eUZEvaRg3KPQo8kmPsilzJCyvvnAQJRuJJzJXm0
+	6ga5JNxHVVlvtwTqITh18KTpHISHcKmmr/PIY3e9HEM7ZqfKhHoiE02RYA==.wCIOWLvJGzCMvU
+	BIGZsAoWYBj3+t6HZdklJ6t9lTUpx51GRoSOUu1WpkeXC6MJtbGt4rEbE9/SJLPjpXiFrE6EFNt
+	e5qnUqmZ/+k+KFwPaKLRyMybFQgryY1N5HZdGgH/qaEb0EK10SsfOAvz4qPJAd346sLs1Z3DP8h
+	XF8at+lRCaFXZkHAvf7CRPhyqMdkutDgPwvbCaCVoUOuaXhvfDS4zgzOSl2eIpFyY8Ye3aUqCmX
+	2zG11rrrS/UuwKiW5t6zJJkZ4HjALvtHhaiSi6tYbX/hzbn7GZ+vxKfnMe0pvnMc/QYYDa/XyPD
+	HqyPisRTdaTZ0dqoHj08KJrgvKKg==
+X-TM-Addin-ProductCode: EMS
+X-Original-Sender: no-reply@info.coinbase.com
+X-Original-Authentication-Results: mx.google.com;       dkim=neutral (body
+ hash did not verify) header.i=@info.coinbase.com header.s=xmk7xv4dzq3ad3l3wrpegkiqkegm4nst
+ header.b=O2ykBJFI;       dkim=neutral (body hash did not verify)
+ header.i=@amazonses.com header.s=224i4yxa5dv7c2xz3womw6peuasteono
+ header.b=BT8wDLqN;       spf=pass (google.com: domain of 0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com
+ designates 76.223.142.137 as permitted sender) smtp.mailfrom=0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000@amazonses.com
+X-Original-From: Coinbase <no-reply@info.coinbase.com>
+Reply-To: Coinbase <no-reply@info.coinbase.com>
+Precedence: list
+Mailing-list: list compliance@pdax.ph; contact compliance+owners@pdax.ph
+List-ID: <compliance.pdax.ph>
+X-Spam-Checked-In-Group: compliance@pdax.ph
+X-Google-Group-Id: 806406710984
+List-Post: <https://groups.google.com/a/pdax.ph/group/compliance/post>, <mailto:compliance@pdax.ph>
+List-Help: <https://support.google.com/a/pdax.ph/bin/topic.py?topic=25838>, <mailto:compliance+help@pdax.ph>
+List-Archive: <https://groups.google.com/a/pdax.ph/group/compliance/>
+List-Unsubscribe: <mailto:googlegroups-manage+806406710984+unsubscribe@googlegroups.com>,
+ <https://groups.google.com/a/pdax.ph/group/compliance/subscribe>
+X-TM-Deliver-Signature: 4BC47A1B7A44C0D1657EDA4EA06A552C
+X-TM-Received-SPF: Pass (domain of 
+	compliance+bncBCPJPIPJ4UHRB5M42LHAMGQEB52MN6A@pdax.ph designates 
+	18.208.22.130 as permitted sender) client-ip=18.208.22.130; 
+	envelope-from=compliance+bncBCPJPIPJ4UHRB5M42LHAMGQEB52MN6A@pdax.ph; 
+	helo=repost01.tmes.trendmicro.com
+X-TM-Authentication-Results: spf=pass (sender IP address: 18.208.22.130) 
+	smtp.mailfrom=pdax.ph; dkim=pass (signatures verified) header.d=pdax.ph; 
+	dmarc=pass action=none header.from=pdax.ph; arc=none
+X-TM-RISKAI-PTN-VERSION: 1.24.0+20260406.423fc34
+X-TM-RISKAI-MATCHEDFID: WyJGSUwwMzMiLCAiRklMMDM3IiwgIkZJTDA0MiIsICJGSUwwNDMi
+	LCAiRklMMDc4IiwgIkZJTDA4MCIsICJGSUwwODciLCAiRklMMDk2IiwgIkZJTDEwNSIsICJGSUw
+	xMjEiLCAiRklMMTIyIiwgIkZJTDEzNyIsICJGSUwxNDkiLCAiRklMMTUwIiwgIkZJTDE1NyIsIC
+	JGSUwxOTciLCAiRklMMTk4IiwgIkZJTDE5OSIsICJGSUwyMDAiLCAiRklMMjMyIiwgIkZJTDI1O
+	SIsICJGSUwyNjkiLCAiRklMMjg0IiwgIkZJTDMwOSJd
+
+------=_Part_808294_691622255.1775537776734
+Content-Type: text/plain;
+	charset="UTF-8"
+Content-Transfer-Encoding: 7bit
+
+EXTERNAL: Please be cautious in opening the contents of this email.
+Hi PDAX,
+
+As per regulation, Coinbase intends to send customer information involved with the following transaction:
+
+- To: bc1qtq36fsrh9shj98zakrj325nz9ya8kydx3pye7z
+- Amount: 0.00208949 BTC
+- Network: BITCOIN
+
+Please visit: https://trusthub.coinbase.com/download/1cbcb537-aa53-4add-854e-d890f5752719
+
+Thanks
+
+------=_Part_808294_691622255.1775537776734
+Content-Type: text/html;
+	charset="UTF-8"
+Content-Transfer-Encoding: 7bit
+
+<table width=100%><tr><td bgcolor=#ffffff><font color=#000000><pre><table border="0" cellspacing="0" cellpadding="0" align="left" width="100%" style="width:100.0%;table-layout:fixed;"><tbody><tr><td style="width:1.0%;background:#ff9838;padding:5.25pt 1.5pt 5.25pt 1.5pt"></td><td width="100%" style="width:100.0%;background:#ffdcbb;padding:5.25pt 3.75pt 5pt 11.25pt; word-wrap:break-word" cellpadding="7px 5px 7px 15px" color="#212121"><p style="text-align: left;"><strong><span style="color: #e03e2d;">EXTERNAL:</span></strong> Please be cautious in opening the contents of this email.</p></td></tr></tbody></table></pre></font></td></tr></table>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+	<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en" style="font-family:Graphik,Helvetica,Arial,sans-serif;padding-left:16px;padding-right:16px">
+	<head>
+	  <style type="text/css">
+	  @media only screen{
+		  html{
+			min-height:100%;
+		  }
+	   }
+	  </style>
+	  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	  <meta name="viewport" content="width=device-width">
+		<title>Coinbase</title>
+	  </head>
+	  <body class="body" style="-moz-box-sizing:border-box;-ms-text-size-adjust:100%;-webkit-box-sizing:border-box;-webkit-text-size-adjust:100%;box-sizing:border-box;font-family:Graphik,Helvetica,Arial,sans-serif;margin:0;padding:0;width:100%;">
+		<!DOCTYPE html>
+<html>
+   <head>
+      <style>
+         @font-face {
+         font-family: 'Graphik Web';
+         font-weight: bold;
+         src: url(/assets/fonts/Coinbase_Display-Bold-web.woff) format("woff"), url(/assets/fonts/Coinbase_Display-Bold-web.ttf) format("truetype");
+         }
+         body {
+         -moz-box-sizing:border-box;
+         -ms-text-size-adjust:100%;
+         -webkit-box-sizing:border-box;
+         -webkit-text-size-adjust:100%;
+         box-sizing:border-box;
+         font-family: 'Graphik Web', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+         margin:0;
+         min-width:100%;
+         padding:0;
+         text-align:left;
+         color: #0A0B0D;
+         }
+         .container {
+         margin:1% auto;
+         border-collapse:collapse;
+         border-spacing:0;
+         padding:0;
+         text-align:left;
+         vertical-align:top;
+         width:575px;
+         }
+          
+         .logo-wordmark {
+         margin-top: 20px;
+         width: 25%;
+         }
+          
+         a {
+          color: #FFFFFF;
+         }
+         .title1 {
+         font-size: 24px;
+         line-height: 32px;
+         }
+         .body {
+         font-size: 16px;
+         line-height: 24px;
+         color: #4E5C6E;
+         }
+         .caption {
+         font-size: 13px;
+         line-height: 16px;
+         color: #5B616E;
+         text-transform: uppercase;
+         }
+         .legal {
+         font-style: normal;
+         font-weight: normal;
+         font-size: 10px;
+         line-height: 18px;
+         color: #708599;
+         }
+         .link {
+         color: #1652F0;
+         }
+          
+         table {
+         border-spacing: 0;
+         width:100%;
+         }
+         td {
+         padding: 10px;
+         }
+         .label {
+         border-left:1px solid #959698;
+         color: #5B616E;
+         font-weight: bold;
+         font-size: 14px;
+         }
+         .data {
+         border-right: 1px solid #959698;
+         font-weight: normal;
+         font-size: 14px;
+         text-align: right
+         }
+         .bottom-border {
+         border-bottom: 1px solid #959698;
+         }
+         .rounded-top-left{
+         border-top:1px solid #959698;
+         border-top-left-radius: 3px;
+         }
+         .rounded-top-right{
+         border-top:1px solid #959698;
+         border-top-right-radius: 3px;
+         }
+         .rounded-bottom-left{
+         border-bottom: 1px solid #959698;
+         border-bottom-left-radius: 3px;
+         }
+         .rounded-bottom-right{
+        border-bottom: 1px solid #959698; 
+        border-bottom-right-radius: 3px;
+         }
+         .status {
+         color: red;
+         }
+         .refunded-amount {
+         font-weight: bold;
+         }
+          
+         .primary-button {
+          background-color:#0052FF; 
+          display:block; 
+          width: 100%; 
+          padding:15px 0px; 
+          font-size: 16px; 
+          font-weight:400;
+          margin: 40px auto; 
+          border-radius: 30px;
+          text-decoration:none; 
+          text-align:center; 
+          color: #FFFFFF;
+         }
+          
+         .text-center {
+         text-align: center;
+         }
+         .center{
+         display: flex;
+         justify-content: center;
+         }
+          
+         @media only screen{
+         html{
+         min-height:100%;
+         }
+         }
+         @media only screen and (max-width: 550px){
+         .container {
+         width: 90%;
+         }
+         .logo-wordmark {
+         width: 35%;
+         }
+         .primary-button {
+         width: 90%;
+         }
+         }
+.box {
+  display: flex;
+  align-items: center;
+  justify-content: center !important;
+}
+.flex-items { 
+  margin: 10px; 
+  display: flex;
+} 
+.imgwrap {
+   margin: 10px;
+}
+.imgwrap img {
+   display: block;
+   height: 46px;
+}
+      </style>
+      <title>Coinbase</title>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+      <meta name="viewport" content="width=device-width">
+   </head>
+   <body>
+      <div class="container">
+         
+         <div style="width:100%; text-align: left;">
+            <a href="https://www.coinbase.com/">
+            <img class="logo-wordmark" src="https://d15k2d11r6t6rl.cloudfront.net/public/users/Integrators/669d5713-9b6a-46bb-bd7e-c542cff6dd6a/3aca56371967418192255878e9689713/coinbase.png"
+               alt="Coinbase logo" title="Coinbase logo">
+            </a>
+         </div>
+         <div>
+            <p class="body"> Hi PDAX</p>
+            <div>As per regulation, Coinbase intends to send customer information involved with the following transaction:</div>
+            
+            <br>
+            <table>
+               <tr>
+                  <td class="label rounded-top-left bottom-border">To</td>
+                  <td class="data rounded-top-right bottom-border">bc1qtq36fsrh9shj98zakrj325nz9ya8kydx3pye7z</td>
+               </tr>
+               <tr>
+                  <td class="label bottom-border">Hash</td>
+                  <td class="data bottom-border">9ebc50baebc393e219b27766a221de2659426808a46c658b10401737b6f857d8</td>
+               </tr>
+               <tr>
+                  <td class="label bottom-border">Amount</td>
+                  <td class="data bottom-border">0.00208949 BTC</td>
+               </tr>
+               <tr>
+                  <td class="label rounded-bottom-left">Network</td>
+                  <td class="data rounded-bottom-right">BITCOIN</td>
+               </tr>
+            </table>
+
+         </div>
+            
+            <p class="body" style="margin: 15px 0;">Interested in sharing Travel Rule data automatically using API? <a href="https://comm.coinbase.com/CL0/https:%2F%2Fwww.coinbase.com%2Ftravelrule/1/0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000/BGcLd9HCik8DrdyVpTY43BxfXvBfs8VR25pHykuw6Vs=451" class="link">Join TRUST.</a></p>
+            
+            
+            <div class="center">
+              <a href="https://comm.coinbase.com/CL0/https:%2F%2Ftrusthub.coinbase.com%2Fdownload%2F1cbcb537-aa53-4add-854e-d890f5752719/1/0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000/CNw1SfHvkBCkBYpBhYIbxBbUR-mPhh9pERETPoDRF5M=451" class="primary-button" style="color: #FFFFFF; margin-top: 20px;">
+    Download
+</a>
+            </div>
+            <div class="center">
+            <b>Note:&nbsp;</b> If the "Download" button is not visible, kindly copy and paste the following link into your web browser: https://trusthub.coinbase.com/download/1cbcb537-aa53-4add-854e-d890f5752719
+            </div> 
+
+        
+                <hr />
+            <div class="dislaimer-text">
+              This email is intended solely for the recipient and may contain confidential information. Any unauthorized review, sharing or  forwarding, is strictly prohibited. If you received this email in error, please notify the sender and delete it, including any attachments.
+            </div>
+      </html>
+   <img alt="" src="http://comm.coinbase.com/CI0/0100019d664c685e-57179004-b3ff-47b4-9b34-1d6a3e3b6ad2-000000/xkPBt36hwwq_szS5RWMmXxNOvL5yQWWn1IsVKmzx_Ac=451" style="display: none; width: 1px; height: 1px;">
+</body>
+		
+	  </body>
+	</html>
+
+------=_Part_808294_691622255.1775537776734--
+

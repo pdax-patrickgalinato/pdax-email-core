@@ -1,0 +1,33 @@
+# Post-verdict disposition policy for the SEG / hold consumer.
+# Tune here — do not hardcode actions in Python.
+#
+# Verdict is owned exclusively by verdict.py. This file only maps that
+# verdict onto a gateway action. AI/providers never write disposition.
+#
+# Enforce modes (env PDAX_ENFORCE, default shadow):
+#   shadow      — log the intended action; always release (safe default)
+#   quarantine  — actually quarantine QUARANTINE dispositions; never REJECT
+#   reject      — as quarantine, but MALICIOUS may become REJECT when
+#                 allow_reject_on_malicious is true
+#
+# HANDOFF.md: prefer quarantine over reject until shadow FP≈0. A 550 loses
+# mail permanently; a quarantine is reversible.
+
+# CLEAN → deliver quietly
+# LOW → deliver + audit log
+# SUSPICIOUS → quarantine for analyst review
+# MALICIOUS → quarantine (or REJECT only in reject mode when allowed)
+verdict_actions:
+  CLEAN: DELIVER
+  LOW: LOG
+  SUSPICIOUS: QUARANTINE
+  MALICIOUS: QUARANTINE
+
+# Only honored when PDAX_ENFORCE=reject. Keep false until shadow metrics
+# prove the reject rule's false-positive rate is essentially zero.
+allow_reject_on_malicious: false
+
+# When pipeline stages error/degrade heavily, fail open (deliver) rather
+# than quarantine everything — a broken enrichment source must not become
+# an accidental mail outage. Override to "quarantine" for fail-closed.
+on_pipeline_error: DELIVER

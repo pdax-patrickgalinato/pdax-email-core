@@ -1,0 +1,5 @@
+# VIP display names to watch for impersonation (one per line).
+PDAX
+nichel
+CEO
+finance

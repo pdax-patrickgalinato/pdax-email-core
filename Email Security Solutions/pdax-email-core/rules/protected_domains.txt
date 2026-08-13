@@ -1,0 +1,5 @@
+# Protected domains — exact matches are legitimate; near-matches are lookalikes.
+pdax.ph
+fireblocks.com
+circle.com
+google.com

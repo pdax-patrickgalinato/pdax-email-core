@@ -1,0 +1,18 @@
+# Local secrets — never commit
+API_KEY
+API_KEY.txt
+GEMINI_API_KEY.txt
+.gemini_api_key
+gemini_api_key.txt
+GROQ_API_KEY.txt
+OPENROUTER_API_KEY.txt
+DEEPSEEK_API_KEY.txt
+OPENAI_API_KEY.txt
+OLLAMA_API_KEY.txt
+LLM_API_KEY.txt
+.sentinel_settings.json
+.sentinel_settings.json.tmp
+__pycache__/
+*.pyc
+.venv/
+venv/

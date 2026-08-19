@@ -190,26 +190,6 @@ rules:
     tags: [Threat Intelligence, Sender Analysis]
     requires: [threat_intel_hit, first_time_sender]
 
-  # ── Hybrid Analysis ───────────────────────────────────────────────────────────
-
-  - id: hybrid_malicious_attachment
-    name: "Attachment confirmed malicious by Hybrid Analysis sandbox"
-    description: >
-      CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a malicious verdict
-      for an attachment — sandbox detonation confirmed active threat.
-    severity: critical
-    tags: [Malware, Threat Intelligence, Sandbox]
-    requires_any: [hybrid_analysis_malicious]
-
-  - id: hybrid_suspicious_attachment
-    name: "Attachment flagged suspicious by Hybrid Analysis"
-    description: >
-      CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a suspicious verdict
-      for an attachment — warrants manual review before delivery.
-    severity: high
-    tags: [Malware, Threat Intelligence, Sandbox]
-    requires_any: [hybrid_analysis_suspicious]
-
   # ── Lookalike / Spoofing ─────────────────────────────────────────────────────
 
   - id: lookalike_domain_spoof

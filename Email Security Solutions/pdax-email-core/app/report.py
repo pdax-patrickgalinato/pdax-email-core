@@ -95,9 +95,6 @@ _FLAG_DESCRIPTIONS = {
     "nlu_intent:job_scam": "NLU classifier identified the intent as a job scam — fake work-from-home or remote-position offer, typically used for advance-fee or PII theft.",
     # Sender history
     "first_time_sender": "This sender address has never been seen before in the past 6 months — new senders combined with suspicious content are a key BEC and phishing indicator.",
-    # Hybrid Analysis
-    "hybrid_analysis_malicious": "CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a MALICIOUS verdict for an attachment hash.",
-    "hybrid_analysis_suspicious": "CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a SUSPICIOUS verdict for an attachment hash.",
 }
 _FLAG_PREFIX_DESCRIPTIONS = {
     "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
@@ -126,8 +123,6 @@ _FLAG_PREFIX_DESCRIPTIONS = {
     "vt_domain_suspicious": "Domain '{value}' has a suspicious VirusTotal reputation score or category flag.",
     "vt_url_submitted": "URL '{value}' was not found in VirusTotal's database and has been submitted for scanning — re-check later for results.",
     "rare_sender": "This sender has only been seen {value} time(s) in the past 6 months — low volume senders warrant additional scrutiny when paired with suspicious content.",
-    "hybrid_analysis_malicious": "CrowdStrike Falcon Sandbox returned a MALICIOUS verdict for attachment hash '{value}'.",
-    "hybrid_analysis_suspicious": "CrowdStrike Falcon Sandbox returned a SUSPICIOUS verdict for attachment hash '{value}'.",
 }
 
 

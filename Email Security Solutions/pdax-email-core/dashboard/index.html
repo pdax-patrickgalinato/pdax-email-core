@@ -1889,21 +1889,38 @@
       var drawerMalicious = drawerBehavHits.filter(function (h) { return h.indexOf("behavioral_shared_shortener:") === 0; });
       var drawerSuspicious = drawerBehavHits.filter(function (h) { return h.indexOf("behavioral_shared_shortener:") !== 0; });
       if (drawerMalicious.length) {
-        html += '<div class="drawer-field"><div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:8px;background:var(--status-critical-bg);color:var(--status-critical);font-size:12.5px;">' +
-          ICON.critical + "<span><strong>Coordinated campaign detected.</strong> Shared link shortener across multiple senders: " +
-          escapeHtml(drawerMalicious.map(function (h) {
-            var p = h.split(":"); return p[1] + " (\xd7" + (p[2] || "?") + " other senders)";
-          }).join(", ")) +
-          "</span></div></div>";
+        var malRows = drawerMalicious.map(function (h) {
+          var p = h.split(":");
+          var domain = p[1] || "", count = p[2] || "?";
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(128,128,128,.15);font-size:12px;">' +
+            '<span><strong>Shortener domain:</strong> <code style="font-size:11px;background:rgba(0,0,0,.18);padding:1px 5px;border-radius:3px;">' + escapeHtml(domain) + '</code></span>' +
+            '<span style="opacity:.65;font-size:11px;">\xd7' + count + ' other sender' + (Number(count) === 1 ? "" : "s") + '</span>' +
+            '</div>';
+        }).join("");
+        html += '<div class="drawer-field"><div style="padding:10px 12px;border-radius:8px;background:var(--status-critical-bg);color:var(--status-critical);">' +
+          '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin-bottom:6px;">' +
+          ICON.critical + '<span>Coordinated Campaign — shared shortener across senders</span></div>' +
+          malRows + '</div></div>';
       }
       if (drawerSuspicious.length) {
-        html += '<div class="drawer-field"><div style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:8px;background:var(--status-serious-bg);color:var(--status-serious);font-size:12.5px;">' +
-          ICON.serious + "<span><strong>Behavioral anomaly detected.</strong> " +
-          drawerSuspicious.length + " sender/IP pattern" + (drawerSuspicious.length === 1 ? "" : "s") + " flagged: " +
-          escapeHtml(drawerSuspicious.map(function (h) {
-            var p = h.split(":"); return p[0].replace("behavioral_", "").replace(/_/g, " ") + " — " + p[1];
-          }).join("; ")) +
-          "</span></div></div>";
+        var ruleLabels = {
+          behavioral_sender_ip_drift: "Sender IP drift",
+          behavioral_ip_many_senders: "Shared attack-platform IP",
+          behavioral_ip_shortener: "IP-linked shortener abuse",
+        };
+        var suspRows = drawerSuspicious.map(function (h) {
+          var p = h.split(":");
+          var rule = p[0], ioc = p[1] || "", count = p[2] || "";
+          var label = ruleLabels[rule] || rule.replace("behavioral_", "").replace(/_/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(128,128,128,.15);font-size:12px;">' +
+            '<span><strong>' + escapeHtml(label) + ':</strong> <code style="font-size:11px;background:rgba(0,0,0,.18);padding:1px 5px;border-radius:3px;">' + escapeHtml(ioc) + '</code></span>' +
+            (count && !isNaN(Number(count)) ? '<span style="opacity:.65;font-size:11px;">' + count + ' occurrence' + (Number(count) === 1 ? "" : "s") + '</span>' : '') +
+            '</div>';
+        }).join("");
+        html += '<div class="drawer-field"><div style="padding:10px 12px;border-radius:8px;background:var(--status-serious-bg);color:var(--status-serious);">' +
+          '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin-bottom:' + (drawerSuspicious.length ? "6" : "0") + 'px;">' +
+          ICON.serious + '<span>Behavioral Anomaly — ' + drawerSuspicious.length + ' pattern' + (drawerSuspicious.length === 1 ? "" : "s") + ' detected</span></div>' +
+          suspRows + '</div></div>';
       }
     }
 

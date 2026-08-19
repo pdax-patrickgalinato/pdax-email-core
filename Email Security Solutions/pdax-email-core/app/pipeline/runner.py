@@ -58,8 +58,7 @@ def load_config():
 
 def run_pipeline(raw: bytes, source: str = "file",
                  content_provider=None, intel_client=None,
-                 config=None, llm_triage=None, correlation_store=None,
-                 ha_client=None) -> PipelineResult:
+                 config=None, llm_triage=None, correlation_store=None) -> PipelineResult:
     weights_cfg, protected, vips, policy_cfg, banned_ext = config or load_config()
     weights = weights_cfg["weights"]
     thresholds = weights_cfg["thresholds"]
@@ -120,7 +119,7 @@ def run_pipeline(raw: bytes, source: str = "file",
     # decision below wants the full non-content picture (including any
     # threat-intel hard override) before deciding whether an LLM call earns
     # its cost.
-    i = safe("intel", intel.run, pe, ic, u.facts, a.facts, cs, ha_client)
+    i = safe("intel", intel.run, pe, ic, u.facts, a.facts, cs)
 
     # Enriched with the other stages' facts (Phase 7 of the TMES policy-parity
     # plan) so a real AI provider reasons over the same full picture a human

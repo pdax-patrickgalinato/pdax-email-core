@@ -1,0 +1,255 @@
+# SEGS Named Detection Rules
+# Mirrors Sublime Security's "Matched Feed Rules" concept — each rule has a
+# human-readable name and description, and fires when its flag conditions are met.
+# Conditions are evaluated against the union of all stage red_flags after scoring.
+#
+# requires:     ALL flags in this list must be present
+# requires_any: AT LEAST ONE flag in this list must be present
+# Omitting either field means that condition is unconstrained.
+
+rules:
+  # ── BEC / Fraud ─────────────────────────────────────────────────────────────
+
+  - id: bec_new_sender
+    name: "BEC attempt from new/untrusted sender"
+    description: >
+      A Business Email Compromise pattern was detected from a sender address
+      not seen in the past 6 months — the combination of a new sender and a
+      financial/wire-transfer ask is the classic BEC attack shape.
+    severity: high
+    tags: [BEC/Fraud, Sender Analysis, Natural Language Understanding]
+    requires_any: [bec_pattern, bec_vip_impersonation, "nlu_intent:bec"]
+    requires: [first_time_sender]
+
+  - id: bec_vip_financial
+    name: "Executive impersonation with financial request"
+    description: >
+      The display name impersonates a watched executive or VIP AND the message
+      body contains a financial/wire-transfer ask — the highest-confidence BEC
+      combination.
+    severity: critical
+    tags: [BEC/Fraud, Impersonation]
+    requires: [bec_vip_impersonation, bec_pattern]
+
+  - id: bec_freemail_persona
+    name: "BEC from freemail account with corporate persona"
+    description: >
+      Sent from a consumer freemail domain (Gmail, Yahoo, etc.) while the
+      display name claims to be IT, finance, or support — a classic low-effort
+      BEC shape that doesn't bother with domain spoofing.
+    severity: high
+    tags: [BEC/Fraud, Sender Analysis]
+    requires: [freemail_corporate_persona, bec_pattern]
+
+  # ── Callback Scam ────────────────────────────────────────────────────────────
+
+  - id: callback_scam_payment_lure
+    name: "Callback scam — fake charge/subscription refund"
+    description: >
+      Fake invoice or subscription charge email asking the recipient to call a
+      phone number. The goal is to social-engineer the victim into authorizing
+      a payment reversal or providing card details over the phone.
+    severity: high
+    tags: [BEC/Fraud, Social Engineering, Natural Language Understanding]
+    requires: ["nlu_intent:callback_scam", urgency_language]
+
+  - id: callback_payment_lure_new_sender
+    name: "Callback scam from new sender"
+    description: >
+      Fake-charge / refund callback scam from a sender not previously observed.
+    severity: high
+    tags: [BEC/Fraud, Social Engineering, Sender Analysis]
+    requires_any: ["nlu_intent:callback_scam", payment_lure_subject]
+    requires: [first_time_sender, urgency_language]
+
+  # ── Credential Phishing ───────────────────────────────────────────────────────
+
+  - id: phishing_lookalike_credential
+    name: "Credential phishing via lookalike domain"
+    description: >
+      A link in the email uses a near-identical lookalike of a protected domain
+      AND the email asks for credentials — a high-confidence credential
+      phishing combination.
+    severity: critical
+    tags: [Credential Phishing, Header Analysis, URL Analysis]
+    requires: [credential_request, url_lookalike_domain]
+
+  - id: phishing_auth_fail_credential
+    name: "Credential phishing with auth failure"
+    description: >
+      Email failed SPF or DKIM authentication AND asks the recipient to log in
+      or verify credentials — forged envelope combined with a phishing lure.
+    severity: high
+    tags: [Credential Phishing, Header Analysis]
+    requires: [credential_request]
+    requires_any: [spf_fail, dkim_fail]
+
+  - id: phishing_new_sender_credential
+    name: "Credential phishing from new sender"
+    description: >
+      Credential-harvesting request from a sender address seen for the first
+      time — new senders with login/verify asks are a core phishing pattern.
+    severity: high
+    tags: [Credential Phishing, Sender Analysis, Natural Language Understanding]
+    requires_any: [credential_request, "nlu_intent:credential_theft"]
+    requires: [first_time_sender]
+
+  # ── Extortion ────────────────────────────────────────────────────────────────
+
+  - id: extortion_sextortion
+    name: "Extortion / sextortion attempt"
+    description: >
+      Email claims to have compromising photos, videos, or passwords and
+      demands cryptocurrency payment — a sextortion or extortion campaign.
+    severity: high
+    tags: [BEC/Fraud, Social Engineering, Natural Language Understanding]
+    requires: ["nlu_intent:extortion"]
+
+  # ── Job Scam ─────────────────────────────────────────────────────────────────
+
+  - id: job_scam_freemail
+    name: "Job scam from freemail sender"
+    description: >
+      Fake job offer or remote-work opportunity sent from a consumer freemail
+      address — a common advance-fee or PII-harvesting scam pattern.
+    severity: medium
+    tags: [BEC/Fraud, Social Engineering, Sender Analysis]
+    requires: ["nlu_intent:job_scam"]
+    requires_any: [freemail_corporate_persona, reply_to_freemail]
+
+  - id: job_scam_new_sender
+    name: "Job scam from new sender"
+    description: >
+      Unsolicited job offer from a sender never previously seen — consistent
+      with mass-sent job-scam campaigns.
+    severity: medium
+    tags: [BEC/Fraud, Social Engineering, Sender Analysis]
+    requires: ["nlu_intent:job_scam", first_time_sender]
+
+  # ── PII Theft ────────────────────────────────────────────────────────────────
+
+  - id: pii_harvest_new_sender
+    name: "PII harvesting attempt from new sender"
+    description: >
+      Email asks for government ID, SSN, bank account, or other sensitive
+      personal information from a sender not previously seen.
+    severity: high
+    tags: [BEC/Fraud, Social Engineering, Natural Language Understanding]
+    requires: ["nlu_intent:steal_pii", first_time_sender]
+
+  # ── Malware / Attachment ─────────────────────────────────────────────────────
+
+  - id: malware_macro_new_sender
+    name: "Macro-enabled attachment from new sender"
+    description: >
+      Email carries a macro-capable Office document from a sender not seen
+      before — cold-contact macro delivery is a primary malware distribution
+      vector.
+    severity: high
+    tags: [Malware, Attachment Analysis, Sender Analysis]
+    requires_any: [oletools_vba_macro_detected, forensics_office_macro]
+    requires: [first_time_sender]
+
+  - id: malware_vba_autoexec
+    name: "VBA macro with auto-execution or shell commands"
+    description: >
+      An Office attachment contains a VBA macro that auto-executes on open
+      and/or calls shell commands — high-confidence malicious macro indicator.
+    severity: critical
+    tags: [Malware, Attachment Analysis]
+    requires: [oletools_autoexec_or_shell]
+
+  - id: malware_threat_intel_hit
+    name: "Attachment matched threat intelligence"
+    description: >
+      An attachment's SHA-256 hash matched a known-malicious indicator in
+      VirusTotal or Hybrid Analysis threat intelligence.
+    severity: critical
+    tags: [Malware, Threat Intelligence]
+    requires_any: [threat_intel_hit]
+
+  # ── Threat Intel ─────────────────────────────────────────────────────────────
+
+  - id: intel_domain_with_spoof
+    name: "Known-bad domain with sender spoofing"
+    description: >
+      A domain in the email matched threat intelligence AND the email exhibits
+      sender spoofing signals (Return-Path mismatch or display name
+      impersonation) — a combined infrastructure-plus-deception indicator.
+    severity: critical
+    tags: [Threat Intelligence, Header Analysis, Sender Analysis]
+    requires: [threat_intel_hit]
+    requires_any: [return_path_mismatch, display_name_domain_impersonation]
+
+  - id: intel_domain_new_sender
+    name: "Known-bad domain from new sender"
+    description: >
+      A domain associated with this email matched known-bad threat intelligence
+      AND the sender has never been seen before.
+    severity: critical
+    tags: [Threat Intelligence, Sender Analysis]
+    requires: [threat_intel_hit, first_time_sender]
+
+  # ── Hybrid Analysis ───────────────────────────────────────────────────────────
+
+  - id: hybrid_malicious_attachment
+    name: "Attachment confirmed malicious by Hybrid Analysis sandbox"
+    description: >
+      CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a malicious verdict
+      for an attachment — sandbox detonation confirmed active threat.
+    severity: critical
+    tags: [Malware, Threat Intelligence, Sandbox]
+    requires_any: [hybrid_analysis_malicious]
+
+  - id: hybrid_suspicious_attachment
+    name: "Attachment flagged suspicious by Hybrid Analysis"
+    description: >
+      CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a suspicious verdict
+      for an attachment — warrants manual review before delivery.
+    severity: high
+    tags: [Malware, Threat Intelligence, Sandbox]
+    requires_any: [hybrid_analysis_suspicious]
+
+  # ── Lookalike / Spoofing ─────────────────────────────────────────────────────
+
+  - id: lookalike_domain_spoof
+    name: "Lookalike sender domain with authentication failure"
+    description: >
+      The sender's domain is a near-identical lookalike of a protected domain
+      AND the email failed SPF or DKIM — forged identity combined with a
+      typosquatted sending domain.
+    severity: critical
+    tags: [Impersonation, Header Analysis, Sender Analysis]
+    requires: [sender_lookalike_domain]
+    requires_any: [spf_fail, dkim_fail, dmarc_fail]
+
+  - id: display_name_spoof_credential
+    name: "Display-name domain spoof with credential request"
+    description: >
+      The sender's display name contains a domain that doesn't match the
+      actual sending address, and the email asks for login/credential input —
+      a display-name phishing attack.
+    severity: high
+    tags: [Impersonation, Credential Phishing, Header Analysis]
+    requires: [display_name_domain_impersonation, credential_request]
+
+  # ── Coordinated Campaign ──────────────────────────────────────────────────────
+
+  - id: coordinated_shortener_campaign
+    name: "Coordinated link-shortener campaign"
+    description: >
+      The same link-shortener domain was used in emails from multiple different
+      sender addresses — strong indicator of a coordinated phishing campaign
+      sharing infrastructure.
+    severity: high
+    tags: [BEC/Fraud, Threat Intelligence, URL Analysis]
+    requires_any: [behavioral_shared_shortener]
+
+  - id: ip_platform_abuse
+    name: "Shared attack platform (IP used by many senders)"
+    description: >
+      The originating IP has sent mail from 5 or more distinct sender addresses
+      — consistent with a shared bulk-sending attack platform.
+    severity: high
+    tags: [Threat Intelligence, Sender Analysis]
+    requires_any: [behavioral_ip_many_senders]

@@ -100,6 +100,11 @@ class PipelineResult(BaseModel):
     thresholds: dict = Field(default_factory=dict)   # {"malicious":70,"suspicious":45,"low":20} — lets reports show margin-to-next-verdict
     stages: list[StageResult] = Field(default_factory=list)
     iocs: IOCSet = Field(default_factory=IOCSet)
+    # Named detection rules that fired — mirrors Sublime Security's "Matched Feed Rules".
+    # Populated by detection_rules.match_rules() after scoring. Each entry:
+    # {"id": str, "name": str, "description": str, "severity": str, "tags": list}
+    matched_rules: list[dict] = Field(default_factory=list)
+
     # Post-verdict enforcement intent (filled by disposition.apply after scoring).
     disposition: Disposition = Disposition.DELIVER
     disposition_reason: str = ""

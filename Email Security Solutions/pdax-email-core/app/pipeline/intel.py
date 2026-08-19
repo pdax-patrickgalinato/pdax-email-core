@@ -368,6 +368,106 @@ class VTAbuseIPDBIntelClient:
         return sorted(set(hits)), any_error
 
 
+class HybridAnalysisClient:
+    """CrowdStrike Falcon Sandbox (Hybrid Analysis) threat intel.
+
+    Provides two tiers:
+    - Hash lookup (GET /search/hash): free, no submission quota, returns cached
+      sandbox verdicts for known files — used for every attachment SHA-256.
+    - URL quick-scan (POST /quick-scan/url-to-file): submits a URL for rapid ML +
+      AV scan; fire-and-forget, result available on next check. Limited on free
+      tier — only submitted for URLs already flagged by other stages.
+
+    Free tier limits: 30 full-sandbox file submissions/month (all public),
+    hash lookup is unrestricted. Submissions are public — do not submit
+    sensitive/internal documents.
+
+    Activate via: export SEG_HA_API_KEY=your_key_here
+    Get a key at: https://www.hybrid-analysis.com/signup
+    """
+
+    _BASE = "https://www.hybrid-analysis.com/api/v2"
+    _VERDICTS = {"malicious", "suspicious"}
+
+    def __init__(self, api_key: Optional[str] = None, cache: Optional[IntelCache] = None,
+                 http_get=None, http_post=None):
+        self.api_key = api_key or os.environ.get("SEG_HA_API_KEY")
+        self.cache = cache or IntelCache()
+        self._http_get = http_get or requests.get
+        self._http_post = http_post or requests.post
+
+    def _headers(self) -> dict:
+        return {
+            "api-key": self.api_key or "",
+            "user-agent": "Falcon Sandbox",
+            "accept": "application/json",
+        }
+
+    def check_hash(self, sha256: str) -> Optional[str]:
+        """Look up a file hash. Returns 'malicious', 'suspicious',
+        'no-specific-threat', 'whitelisted', or None on miss/error."""
+        if not self.api_key or not sha256:
+            return None
+        cached = self.cache.get(sha256, "hash", "hybrid_analysis")
+        if cached is not None:
+            return cached
+        try:
+            resp = self._http_get(
+                f"{self._BASE}/search/hash",
+                params={"hash": sha256},
+                headers=self._headers(),
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data if isinstance(data, list) else []
+                verdict = results[0].get("verdict") if results else None
+                result_str = verdict or "no-specific-threat"
+                self.cache.put(sha256, "hash", "hybrid_analysis", result_str)
+                return result_str
+            elif resp.status_code == 404:
+                self.cache.put(sha256, "hash", "hybrid_analysis", "unknown")
+                return None
+        except Exception:
+            pass
+        return None
+
+    def quick_scan_url(self, url: str) -> None:
+        """Submit a URL for quick scan (fire-and-forget). Results cached by URL."""
+        if not self.api_key or not url:
+            return
+        submit_key = f"url_submitted:{url[:200]}"
+        if self.cache.get(submit_key, "url_submission", "hybrid_analysis") == "submitted":
+            return
+        try:
+            resp = self._http_post(
+                f"{self._BASE}/quick-scan/url-to-file",
+                headers={**self._headers(), "content-type": "application/x-www-form-urlencoded"},
+                data={"scan_type": "all", "url": url},
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                self.cache.put(submit_key, "url_submission", "hybrid_analysis", "submitted")
+        except Exception:
+            pass
+
+    def check_hashes(self, hashes: list[str]) -> tuple[list[str], bool]:
+        """Check multiple hashes. Returns (hit_flags, any_error)."""
+        if not self.api_key:
+            return [], False
+        hits: list[str] = []
+        any_error = False
+        for sha256 in hashes:
+            verdict = self.check_hash(sha256)
+            if verdict == "malicious":
+                hits.append(f"hybrid_analysis_malicious:{sha256[:16]}")
+            elif verdict == "suspicious":
+                hits.append(f"hybrid_analysis_suspicious:{sha256[:16]}")
+            elif verdict is None and self.api_key:
+                any_error = True
+        return hits, any_error
+
+
 def get_default_intel_client() -> IntelClient:
     """Selects the intel client from SEG_INTEL_CLIENT. Defaults to the
     offline LocalIOCClient (empty known-bad set) so nothing calls out to
@@ -379,8 +479,16 @@ def get_default_intel_client() -> IntelClient:
     return LocalIOCClient()
 
 
+def get_default_ha_client() -> Optional[HybridAnalysisClient]:
+    """Returns a HybridAnalysisClient if SEG_HA_API_KEY is set, else None."""
+    if os.environ.get("SEG_HA_API_KEY"):
+        return HybridAnalysisClient()
+    return None
+
+
 def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
-        attach_facts: dict, correlation_store=None) -> StageResult:
+        attach_facts: dict, correlation_store=None,
+        ha_client: Optional["HybridAnalysisClient"] = None) -> StageResult:
     t0 = time.perf_counter()
     domains = [pe.from_domain] + [u.get("reg_domain", "") for u in url_stage_facts.get("urls", [])]
     domains = [d for d in domains if d]
@@ -402,6 +510,29 @@ def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
     hashes = [a.get("sha256", "") for a in attach_facts.get("attachments", [])]
 
     hits, degraded = client.check(all_domains, ips, urls, hashes)
+
+    # Hybrid Analysis hash lookup — check every attachment SHA-256 against
+    # CrowdStrike Falcon Sandbox for sandbox-confirmed verdicts. Hash lookup
+    # is free and unrestricted on the HA free tier (no submission quota).
+    ha_hits: list[str] = []
+    _ha = ha_client or get_default_ha_client()
+    if _ha and hashes:
+        try:
+            ha_hits, _ = _ha.check_hashes(hashes)
+            hits = hits + ha_hits
+        except Exception:
+            pass
+
+    # Submit flagged URLs to HA quick-scan (fire-and-forget, cached per URL).
+    # Only submits URLs already flagged by other stages to stay within free limits.
+    if _ha and hits:
+        flagged_urls = [u.get("url", "") for u in url_stage_facts.get("urls", [])
+                        if u.get("url")]
+        for url in flagged_urls[:3]:   # cap at 3 per email to conserve quota
+            try:
+                _ha.quick_scan_url(url)
+            except Exception:
+                pass
 
     # Domain reputation details — populated by VTAbuseIPDBIntelClient.check() via
     # save_details=True. Fall back silently if the client doesn't support this.
@@ -428,14 +559,36 @@ def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
             for d in behavioral_details
         ]
 
-    # Only real external intel hits affect scoring — behavioral is reference only.
+    # First-time / rare sender detection — draws from sender_history table in the
+    # behavioral store. A brand-new sender is a key BEC risk signal (used by
+    # Sublime Security's core feed rules). Scored as a regular flag so detection
+    # rules can match against it.
+    sender_flags: list[str] = []
+    if correlation_store is not None and hasattr(correlation_store, "sender_prior_count"):
+        try:
+            prior = correlation_store.sender_prior_count((pe.from_addr or "").lower())
+            if prior == 0:
+                sender_flags.append("first_time_sender")
+            elif prior <= 3:
+                sender_flags.append(f"rare_sender:{prior}")
+        except Exception:
+            pass
+
+    # Only real external intel hits + sender novelty affect scoring.
+    # Behavioral correlation patterns remain reference-only.
     score = 90.0 if hits else 0.0
+    if "first_time_sender" in sender_flags:
+        score = max(score, 8.0)
+    elif sender_flags:  # rare_sender
+        score = max(score, 4.0)
+
+    all_red_flags = hits + sender_flags
 
     return StageResult(
         stage="intel",
         status=StageStatus.DEGRADED if degraded else StageStatus.OK,
         sub_score=score,
-        red_flags=hits,  # behavioral flags intentionally excluded from red_flags
+        red_flags=all_red_flags,
         facts={"checked_domains": sorted(set(all_domains)), "checked_ips": sorted(set(ips)),
                "hits": hits,
                "domain_details": domain_details,

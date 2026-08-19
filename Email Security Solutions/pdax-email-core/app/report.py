@@ -86,6 +86,18 @@ _FLAG_DESCRIPTIONS = {
     # Attachment signals
     "oletools_vba_macro_detected": "A VBA macro was detected in the attachment by oletools static analysis — macros can execute arbitrary code when the document is opened.",
     "oletools_autoexec_or_shell": "The attachment's VBA macro contains auto-execution triggers or shell commands (AutoExec, Shell, WScript) — high-confidence malicious macro indicator.",
+    # NLU intent classification
+    "nlu_intent:bec": "NLU classifier identified the intent as Business Email Compromise — financial diversion, gift-card request, or wire-transfer ask.",
+    "nlu_intent:callback_scam": "NLU classifier identified the intent as a callback scam — fake subscription charge or invoice asking the recipient to call a phone number.",
+    "nlu_intent:credential_theft": "NLU classifier identified the intent as credential theft — login, password reset, or account-verification phishing.",
+    "nlu_intent:extortion": "NLU classifier identified the intent as extortion — threats to expose compromising material unless cryptocurrency is paid.",
+    "nlu_intent:steal_pii": "NLU classifier identified the intent as PII harvesting — requests for SSN, passport, bank account, or other sensitive personal data.",
+    "nlu_intent:job_scam": "NLU classifier identified the intent as a job scam — fake work-from-home or remote-position offer, typically used for advance-fee or PII theft.",
+    # Sender history
+    "first_time_sender": "This sender address has never been seen before in the past 6 months — new senders combined with suspicious content are a key BEC and phishing indicator.",
+    # Hybrid Analysis
+    "hybrid_analysis_malicious": "CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a MALICIOUS verdict for an attachment hash.",
+    "hybrid_analysis_suspicious": "CrowdStrike Falcon Sandbox (Hybrid Analysis) returned a SUSPICIOUS verdict for an attachment hash.",
 }
 _FLAG_PREFIX_DESCRIPTIONS = {
     "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
@@ -113,6 +125,9 @@ _FLAG_PREFIX_DESCRIPTIONS = {
     "url_tracking_beacon": "External resource '{value}' is embedded as a tracking image/pixel that loads automatically when the email is opened.",
     "vt_domain_suspicious": "Domain '{value}' has a suspicious VirusTotal reputation score or category flag.",
     "vt_url_submitted": "URL '{value}' was not found in VirusTotal's database and has been submitted for scanning — re-check later for results.",
+    "rare_sender": "This sender has only been seen {value} time(s) in the past 6 months — low volume senders warrant additional scrutiny when paired with suspicious content.",
+    "hybrid_analysis_malicious": "CrowdStrike Falcon Sandbox returned a MALICIOUS verdict for attachment hash '{value}'.",
+    "hybrid_analysis_suspicious": "CrowdStrike Falcon Sandbox returned a SUSPICIOUS verdict for attachment hash '{value}'.",
 }
 
 
@@ -446,6 +461,30 @@ def text_report(r: PipelineResult) -> str:
     else:
         lines.append("_No red flags were raised on any stage._")
     lines += ["", f"**Raw signal tags:** `{'`, `'.join(r.reasons) if r.reasons else 'none'}`"]
+
+    # ── Matched Detection Rules ───────────────────────────────────────────────
+    if r.matched_rules:
+        lines += ["", "---", "", "## Matched Detection Rules", ""]
+        lines.append(
+            "_Named rules that fired based on the combination of signals detected. "
+            "Mirrors Sublime Security's 'Matched Feed Rules' concept._"
+        )
+        lines.append("")
+        severity_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}
+        rule_rows = [
+            [
+                severity_icon.get(rule["severity"], "⚪") + " " + rule["severity"].upper(),
+                rule["name"],
+                ", ".join(rule.get("tags", [])),
+            ]
+            for rule in r.matched_rules
+        ]
+        lines.append(_md_table(rule_rows, ["Severity", "Rule", "Categories"]))
+        lines.append("")
+        for rule in r.matched_rules:
+            lines.append(f"**{rule['name']}**")
+            lines.append(f"> {rule['description']}")
+            lines.append("")
 
     # ── Threat Intelligence (VT / AbuseIPDB) ──────────────────────────────────
     lines.extend(_intel_section(r))

@@ -138,6 +138,54 @@ class NullProvider:
         return 0.0, [], {"provider": "null"}
 
 
+# ── NLU Intent Classification ─────────────────────────────────────────────────
+# Structured intent labels mirroring Sublime Security's NLU engine categories.
+# HeuristicProvider derives intent from signal combinations; LLM providers add
+# it to their tool schema so the model classifies directly.
+_NLU_INTENTS = ("bec", "callback_scam", "credential_theft", "extortion",
+                 "steal_pii", "job_scam", "none")
+
+_EXTORTION_RE = re.compile(
+    r"\b(i (have|got) your (photos?|videos?|webcam footage)|"
+    r"pay (bitcoin|btc|crypto)|sextortion|"
+    r"embarrassing (footage|video|content)|"
+    r"recorded you|your (password|device) (is|was))\b", re.I)
+_CALLBACK_RE = re.compile(
+    r"\b(call (us|our|this number|back)|"
+    r"customer (care|service|support).{0,20}(number|\d{3}[-.\s]\d{4})|"
+    r"\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}|"
+    r"(norton|geek.?squad|amazon|paypal|mcafee|best buy).{0,40}"
+    r"(renewal|subscription|refund|charge|invoice))\b", re.I)
+_JOB_SCAM_RE = re.compile(
+    r"\b(job offer|work from home|remote position|"
+    r"weekly pay|part.?time (job|work|opportunity)|"
+    r"earn \$\d+|no experience (required|needed)|"
+    r"flexible (hours|schedule).{0,30}(apply|earn|income))\b", re.I)
+_PII_RE = re.compile(
+    r"\b(social security( number)?|ssn|"
+    r"passport (number|copy)|"
+    r"bank account (number|details)|routing number|"
+    r"date of birth|mother.?s maiden name)\b", re.I)
+
+
+def _heuristic_intent(findings: list[str], subject: str, body: str) -> tuple[str, float]:
+    """Infer NLU intent from heuristic findings and text patterns."""
+    text = f"{subject}\n{body}"
+    if "bec_pattern" in findings or "bec_vip_impersonation" in findings:
+        return "bec", 0.85
+    if _EXTORTION_RE.search(text):
+        return "extortion", 0.90
+    if _PII_RE.search(text):
+        return "steal_pii", 0.75
+    if _CALLBACK_RE.search(text):
+        return "callback_scam", 0.80
+    if _JOB_SCAM_RE.search(text):
+        return "job_scam", 0.70
+    if "credential_request" in findings:
+        return "credential_theft", 0.80
+    return "none", 0.0
+
+
 class HeuristicProvider:
     """Cheap keyword/urgency heuristics — a stand-in that lets the offline core
     contribute a content sub-score. Production swaps in a real LLM provider."""
@@ -207,15 +255,20 @@ class HeuristicProvider:
         ):
             findings.append("fake_reply_prefix"); score += 25
 
-        # Free enhancement (no model call, just string formatting): even the
-        # zero-cost default provider gives an analyst a synthesized one-line
-        # picture that reflects what the other stages found, not just this
-        # stage's own regex hits.
+        # NLU intent classification from heuristic signal combinations.
+        intent, confidence = _heuristic_intent(findings, subject or "", body or "")
+        if intent != "none":
+            findings.append(f"nlu_intent:{intent}")
+
         other = _summarize_context(context)
         summary = (f"Heuristic content findings: {', '.join(findings) if findings else 'none'}. "
                   f"{other}")
 
-        return min(score, 100.0), findings, {"provider": "heuristic", "summary": summary}
+        facts: dict = {"provider": "heuristic", "summary": summary}
+        if intent != "none":
+            facts["nlu_intent"] = intent
+            facts["nlu_confidence"] = confidence
+        return min(score, 100.0), findings, facts
 
 
 # Known finding vocabulary. verdict.py's BEC override matches "bec_pattern"
@@ -227,6 +280,8 @@ _KNOWN_FINDINGS = (
     "payment_lure_subject", "fake_reply_prefix", "brand_impersonation",
     "unusual_request", "prompt_injection_attempt", "content_padding_evasion",
     "lure_scarcity_reward",
+    "nlu_intent:bec", "nlu_intent:callback_scam", "nlu_intent:credential_theft",
+    "nlu_intent:extortion", "nlu_intent:steal_pii", "nlu_intent:job_scam",
 )
 
 _ORG = org_config.load_org_config()
@@ -312,6 +367,16 @@ _TOOL_CONFIG = {
                         "type": "string",
                         "description": "One or two sentence rationale for the score.",
                     },
+                    "nlu_intent": {
+                        "type": "string",
+                        "enum": ["bec", "callback_scam", "credential_theft",
+                                 "extortion", "steal_pii", "job_scam", "none"],
+                        "description": "Primary threat intent of the email, or 'none' if clean/benign.",
+                    },
+                    "nlu_confidence": {
+                        "type": "number", "minimum": 0.0, "maximum": 1.0,
+                        "description": "Confidence in the intent classification (0.0-1.0).",
+                    },
                 },
                 "required": ["score", "findings", "summary"],
             }},
@@ -325,6 +390,8 @@ class _ContentAnalysis(BaseModel):
     score: float = Field(ge=0, le=100)
     findings: list[str] = Field(default_factory=list)
     summary: str = ""
+    nlu_intent: str = "none"
+    nlu_confidence: float = 0.0
 
 
 class BedrockProvider:
@@ -396,12 +463,15 @@ class BedrockProvider:
                     raise ValueError("model did not call the required tool on repair")
                 parsed = _ContentAnalysis(**tool_input)  # let a second failure raise
 
-            facts = {"provider": "bedrock", "model_id": self.model_id, "summary": parsed.summary}
-            return min(max(parsed.score, 0.0), 100.0), parsed.findings, facts
+            findings = list(parsed.findings)
+            facts: dict = {"provider": "bedrock", "model_id": self.model_id, "summary": parsed.summary}
+            if parsed.nlu_intent and parsed.nlu_intent != "none":
+                findings.append(f"nlu_intent:{parsed.nlu_intent}")
+                facts["nlu_intent"] = parsed.nlu_intent
+                facts["nlu_confidence"] = parsed.nlu_confidence
+            return min(max(parsed.score, 0.0), 100.0), findings, facts
 
         except Exception as e:
-            # A Bedrock outage or malformed output must not sink the pipeline —
-            # degrade honestly to zero content signal, same contract as NullProvider.
             return 0.0, [], {"provider": "bedrock", "degraded": True,
                               "error": f"{type(e).__name__}: {e}"}
 
@@ -538,8 +608,13 @@ class GeminiProvider:
                     raise ValueError("model returned no content on repair")
                 parsed = _ContentAnalysis(**_json.loads(text))  # let a second failure raise
 
-            facts = {"provider": "gemini", "model_id": self.model_id, "summary": parsed.summary}
-            return min(max(parsed.score, 0.0), 100.0), parsed.findings, facts
+            findings = list(parsed.findings)
+            facts: dict = {"provider": "gemini", "model_id": self.model_id, "summary": parsed.summary}
+            if parsed.nlu_intent and parsed.nlu_intent != "none":
+                findings.append(f"nlu_intent:{parsed.nlu_intent}")
+                facts["nlu_intent"] = parsed.nlu_intent
+                facts["nlu_confidence"] = parsed.nlu_confidence
+            return min(max(parsed.score, 0.0), 100.0), findings, facts
 
         except Exception as e:
             # A Gemini outage or malformed output must not sink the pipeline —
@@ -745,8 +820,13 @@ class GLMProvider:
                     raise ValueError("model returned no content on repair")
                 parsed = _ContentAnalysis(**_json.loads(text))  # let a second failure raise
 
-            facts = {"provider": "glm", "model_id": self.model_id, "summary": parsed.summary}
-            return min(max(parsed.score, 0.0), 100.0), parsed.findings, facts
+            findings = list(parsed.findings)
+            facts: dict = {"provider": "glm", "model_id": self.model_id, "summary": parsed.summary}
+            if parsed.nlu_intent and parsed.nlu_intent != "none":
+                findings.append(f"nlu_intent:{parsed.nlu_intent}")
+                facts["nlu_intent"] = parsed.nlu_intent
+                facts["nlu_confidence"] = parsed.nlu_confidence
+            return min(max(parsed.score, 0.0), 100.0), findings, facts
 
         except Exception as e:
             # A GLM/MaaS outage, auth failure, or malformed output must not
@@ -860,8 +940,13 @@ class OllamaProvider:
                     raise ValueError("model returned no content on repair")
                 parsed = _ContentAnalysis(**_json.loads(text))  # let a second failure raise
 
-            facts = {"provider": "ollama", "model_id": self.model_id, "summary": parsed.summary}
-            return min(max(parsed.score, 0.0), 100.0), parsed.findings, facts
+            findings = list(parsed.findings)
+            facts: dict = {"provider": "ollama", "model_id": self.model_id, "summary": parsed.summary}
+            if parsed.nlu_intent and parsed.nlu_intent != "none":
+                findings.append(f"nlu_intent:{parsed.nlu_intent}")
+                facts["nlu_intent"] = parsed.nlu_intent
+                facts["nlu_confidence"] = parsed.nlu_confidence
+            return min(max(parsed.score, 0.0), 100.0), findings, facts
 
         except Exception as e:
             # Ollama not running, host unreachable, no model pulled, or

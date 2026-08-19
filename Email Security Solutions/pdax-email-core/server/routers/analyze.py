@@ -61,6 +61,7 @@ def _pipeline_summary(raw: bytes, filename: str, correlation_store=None) -> tupl
         },
         "sourceFile": filename,
         "intelFacts": intel_facts,
+        "matchedRules": list(result.matched_rules or []),
     }
     return summary, result
 
@@ -121,6 +122,26 @@ def _segs_section(pipeline_result, pipeline_summary: dict) -> str:
             _md_table(stage_rows, ["Stage", "Score", "Flags"]),
             "",
         ]
+
+    # Matched detection rules
+    matched_rules = pipeline_summary.get("matchedRules") or []
+    if matched_rules:
+        severity_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵"}
+        lines += ["### Matched Detection Rules", ""]
+        rule_rows = [
+            [
+                severity_icon.get(r["severity"], "⚪") + " " + r["severity"].upper(),
+                r["name"],
+                ", ".join(r.get("tags", [])),
+            ]
+            for r in matched_rules
+        ]
+        lines.append(_md_table(rule_rows, ["Severity", "Rule", "Categories"]))
+        lines.append("")
+        for rule in matched_rules:
+            lines.append(f"**{rule['name']}**")
+            lines.append(f"> {rule['description']}")
+            lines.append("")
 
     # Verdict explanation
     if reasons:

@@ -72,6 +72,13 @@ CREATE TABLE IF NOT EXISTS sender_shortener_log (
 );
 CREATE INDEX IF NOT EXISTS idx_ssl_sender ON sender_shortener_log(sender);
 CREATE INDEX IF NOT EXISTS idx_ssl_shortener ON sender_shortener_log(shortener_domain);
+
+CREATE TABLE IF NOT EXISTS sender_history (
+    sender TEXT NOT NULL,
+    seen_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sh_sender ON sender_history(sender);
+CREATE INDEX IF NOT EXISTS idx_sh_seen_at ON sender_history(seen_at);
 """
 
 _FLAGGED = ("SUSPICIOUS", "MALICIOUS")
@@ -138,6 +145,11 @@ class BehavioralCorrelationStore:
                         "VALUES (?,?,?,?,?)",
                         [(sender, domain, verdict, message_id, now)
                          for domain in shortener_domains],
+                    )
+                if sender:
+                    conn.execute(
+                        "INSERT INTO sender_history(sender, seen_at) VALUES (?,?)",
+                        (sender, now),
                     )
                 conn.commit()
             finally:
@@ -297,6 +309,26 @@ class BehavioralCorrelationStore:
                 conn.close()
         except (sqlite3.Error, OSError):
             return []
+
+    def sender_prior_count(self, sender: str) -> int:
+        """Return how many times this sender has been seen in the past 6 months.
+        Returns 0 if sender is unknown or on storage error."""
+        sender = (sender or "").lower().strip()
+        if not sender:
+            return 0
+        cutoff = time.time() - _WINDOW
+        try:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM sender_history WHERE sender=? AND seen_at>?",
+                    (sender, cutoff),
+                ).fetchone()
+                return int(row[0]) if row else 0
+            finally:
+                conn.close()
+        except (sqlite3.Error, OSError):
+            return 0
 
     def behavioral_lookup(
         self,

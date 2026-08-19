@@ -13,6 +13,7 @@ from ..parsed_email import ParsedEmail
 from .. import disposition as disposition_mod
 from . import headers, sender, urls, attachments, content_ai, intel, verdict, deception
 from . import correlation as correlation_mod
+from . import detection_rules as detection_rules_mod
 
 _RULES_DIR = Path(__file__).resolve().parents[2] / "rules"
 
@@ -57,7 +58,8 @@ def load_config():
 
 def run_pipeline(raw: bytes, source: str = "file",
                  content_provider=None, intel_client=None,
-                 config=None, llm_triage=None, correlation_store=None) -> PipelineResult:
+                 config=None, llm_triage=None, correlation_store=None,
+                 ha_client=None) -> PipelineResult:
     weights_cfg, protected, vips, policy_cfg, banned_ext = config or load_config()
     weights = weights_cfg["weights"]
     thresholds = weights_cfg["thresholds"]
@@ -118,7 +120,7 @@ def run_pipeline(raw: bytes, source: str = "file",
     # decision below wants the full non-content picture (including any
     # threat-intel hard override) before deciding whether an LLM call earns
     # its cost.
-    i = safe("intel", intel.run, pe, ic, u.facts, a.facts, cs)
+    i = safe("intel", intel.run, pe, ic, u.facts, a.facts, cs, ha_client)
 
     # Enriched with the other stages' facts (Phase 7 of the TMES policy-parity
     # plan) so a real AI provider reasons over the same full picture a human
@@ -171,6 +173,15 @@ def run_pipeline(raw: bytes, source: str = "file",
             )
         except Exception:
             pass
+
+    # Named detection rules — evaluated after final scoring so all stage flags
+    # (including intel hits and behavioral signals) are available. Applies to
+    # every pipeline path: EML upload, live feed, and gateway hold consumer.
+    all_flags = [f for s in result.stages for f in (s.red_flags or [])]
+    try:
+        result.matched_rules = detection_rules_mod.match_rules(all_flags)
+    except Exception:
+        result.matched_rules = []
 
     # Post-verdict only: map CLEAN/LOW/SUSPICIOUS/MALICIOUS → gateway action.
     # Does not change the verdict; AI never writes disposition.

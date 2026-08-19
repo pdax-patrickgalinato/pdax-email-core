@@ -26,6 +26,7 @@ _FLAG_DESCRIPTIONS = {
     "dmarc_fail": "DMARC failed — this domain's own policy says messages like this shouldn't be trusted.",
     "return_path_mismatch": "The bounce address (Return-Path) doesn't match the visible From domain — common in spoofed mail.",
     "reply_to_divergent": "Replies would go to a different domain than the visible sender — a classic reply-hijack tell.",
+    "reply_to_freemail": "Reply-To points at a consumer freemail domain (Gmail, iCloud, etc.) — common for legitimate platform developer contacts, but a reinforcing handoff signal when the From is a trusted transactional platform pushing a foreign brand.",
     "display_name_email_mismatch": "The display name shows one email address, but the real sending address is a different one entirely.",
     "display_name_is_email": "The display name is itself formatted as an email address, matching the real sender — lower risk on its own, but unusual.",
     "freemail_corporate_persona": "Sent from a free consumer email domain (Gmail, Yahoo, etc.) but the display name claims to be IT/finance/support — a common BEC shape.",
@@ -39,6 +40,11 @@ _FLAG_DESCRIPTIONS = {
     "url_redirect_to_page_file": "A redirect link's real destination is a bare .html/.php page on someone else's site — the typical shape of a dropped phishing page.",
     "url_redirect_to_ip": "A redirect/tracker link's real destination is a raw IP address — no legitimate tracker's actual destination is a bare IP.",
     "anchor_href_mismatch": "The clickable text of a link names one domain, but the link actually goes somewhere else.",
+    "service_abuse_testflight_brand_lure": "Legitimate Apple TestFlight mail inviting you to a beta app that impersonates OpenAI, ChatGPT, Meta, or another mega-brand — trusted-channel service abuse (auth looks clean because Apple really sent it).",
+    "trusted_channel_brand_mismatch": "Mail from a trusted transactional platform (e.g. Apple TestFlight) whose subject/body names a foreign mega-brand the platform does not own — brand-vs-channel mismatch.",
+    "trusted_channel_reply_to_freemail": "Trusted-platform From address with Reply-To on consumer freemail — identity handoff to a personal mailbox (reinforcing when paired with a foreign brand lure).",
+    "deception_structure_service_abuse": "Composed deception structure: authentic trusted-platform channel + on-platform links + foreign brand lure. Auth passing is expected; the malice is the structure, not a spoofed envelope.",
+    "lure_scarcity_reward": "Content uses scarcity and/or reward bait (limited seats, free credits) — a common social-engineering reinforcer, not proof on its own.",
     "content_padding_evasion": "The email body contains an unusually large block of blank/whitespace lines — a known trick to bury the real lure or dodge automated content scanning.",
     "urgency_language": "The wording pressures urgent action (deadlines, threats, \"immediately\") — a standard social-engineering tactic.",
     "credential_request": "The wording asks you to log in, verify, or confirm your identity/credentials.",
@@ -67,6 +73,19 @@ _FLAG_DESCRIPTIONS = {
     "forensics_possible_zip_bomb": "Attachment archive's compression ratio or uncompressed size exceeds safe bounds — consistent with a decompression-bomb resource-exhaustion attempt.",
     "forensics_encrypted_archive": "Attachment archive has password-protected/encrypted members — a known technique for hiding malicious content from automated scanning.",
     "forensics_executable_content": "Attachment's actual content is executable code, regardless of its declared file type.",
+    # Extended header signals
+    "missing_message_id": "Message-ID header is absent — legitimate mail servers always generate one; its absence is a sign of script-generated or spoofed mail.",
+    "missing_mime_version": "MIME-Version header is absent — most modern email clients include it; its absence is a marginal signal associated with spam and scripted senders.",
+    "date_anomaly_future": "The email's Date header shows a timestamp more than 2 days in the future — consistent with forged or tampered headers.",
+    "date_anomaly_stale": "The email's Date header is over 30 days in the past — either an unusually delayed message or a forged timestamp.",
+    "suspicious_x_mailer": "The X-Mailer or User-Agent header identifies a bulk/scripted mail tool (PHPMailer, libwww-perl, etc.) — commonly used to automate spam and phishing campaigns.",
+    "display_name_domain_impersonation": "The sender's display name contains a domain that doesn't match the actual sending domain — e.g. 'PayPal <attacker@evil.com>' — a classic phishing display-name spoof.",
+    # URL signals
+    "tracking_beacon_detected": "The email loads external images or resources automatically on open — consistent with a tracking pixel that confirms email delivery and may capture the reader's IP address.",
+    "url_ftp_scheme": "A URL in this email uses the FTP scheme — very rarely used in legitimate email; may indicate a link to a malicious file server.",
+    # Attachment signals
+    "oletools_vba_macro_detected": "A VBA macro was detected in the attachment by oletools static analysis — macros can execute arbitrary code when the document is opened.",
+    "oletools_autoexec_or_shell": "The attachment's VBA macro contains auto-execution triggers or shell commands (AutoExec, Shell, WScript) — high-confidence malicious macro indicator.",
 }
 _FLAG_PREFIX_DESCRIPTIONS = {
     "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
@@ -83,8 +102,17 @@ _FLAG_PREFIX_DESCRIPTIONS = {
     "ai": "AI reviewer identified a pattern not in the standard checklist: {value}",
     "spoofed_attachment_type": "An attachment's actual file type (from its content, not its name) doesn't match its declared extension: {value} — a classic disguised-executable trick.",
     "double_extension_executable": "Attachment filename hides an executable behind a benign-looking extension (e.g. invoice.pdf.exe): {value}",
-    "correlation_seen_before": "One of this email's indicators (indicator:count = {value}) was already seen in a prior SUSPICIOUS/MALICIOUS verdict from this pipeline's own history.",
+    "service_abuse": "Trusted-platform service abuse ({value}): authentic channel mail pushing a foreign brand lure.",
+    "behavioral_sender_ip_drift": "Sender '{value}' has been observed using multiple originating IPs over the past 6 months — consistent with account compromise or a lookalike sender rotating infrastructure.",
+    "behavioral_ip_many_senders": "Originating IP '{value}' has sent mail from 5 or more distinct sender addresses — consistent with a shared attack platform.",
+    "behavioral_ip_shortener": "Originating IP '{value}' has previously sent emails containing link-shortener URLs — consistent with a link obfuscation campaign.",
+    "behavioral_shared_shortener": "Link shortener domain '{value}' was also used by different sender addresses — strong indicator of a coordinated phishing campaign.",
+    "url_link_shortener": "A link in this email uses the known link-shortener service '{value}' — shorteners hide the real destination.",
     "domain_age_low": "The sender's domain was registered only {value} day(s) ago — newly-registered domains are common phishing infrastructure.",
+    "received_hop_delay": "An unusually long delay ({value}) between mail relay hops — may indicate routing through a compromised proxy or timestamp manipulation.",
+    "url_tracking_beacon": "External resource '{value}' is embedded as a tracking image/pixel that loads automatically when the email is opened.",
+    "vt_domain_suspicious": "Domain '{value}' has a suspicious VirusTotal reputation score or category flag.",
+    "vt_url_submitted": "URL '{value}' was not found in VirusTotal's database and has been submitted for scanning — re-check later for results.",
 }
 
 
@@ -202,6 +230,20 @@ def _ioc_context(r: PipelineResult) -> dict:
 
     if intel and intel.red_flags:
         for hit in intel.red_flags:
+            if hit.startswith("behavioral_"):
+                # format: behavioral_<rule>:<ioc_value>:<count>
+                parts = hit.split(":", 2)
+                if len(parts) == 3:
+                    prefix, ioc_value, count = parts
+                    if prefix == "behavioral_sender_ip_drift":
+                        notes[ioc_value] = f"SENDER USED {count} DIFFERENT ORIGINATING IPs IN PAST 6 MONTHS"
+                    elif prefix == "behavioral_ip_many_senders":
+                        notes[ioc_value] = f"IP USED BY {count} DIFFERENT SENDERS IN PAST 6 MONTHS"
+                    elif prefix == "behavioral_ip_shortener":
+                        notes[ioc_value] = f"IP PREVIOUSLY SENT LINK-SHORTENER EMAILS ({count} OCCURRENCES)"
+                    elif prefix == "behavioral_shared_shortener":
+                        notes[ioc_value] = f"SHORTENER DOMAIN USED BY {count} OTHER SENDERS (COORDINATED CAMPAIGN)"
+                continue
             _, _, value = hit.partition(":")
             if value:
                 notes[value] = "MATCHED KNOWN-BAD THREAT INTEL"

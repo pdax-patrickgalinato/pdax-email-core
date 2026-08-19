@@ -6,9 +6,10 @@ non-brand domain, IP-literal URLs, excessive subdomains, risky TLDs,
 payload in a query parameter of a legitimate tracker/gateway domain, so the
 visible domain looks clean), and an OAuth `state`-param email-exposure check
 (a plaintext victim address in `state` on an otherwise-legitimate authorize
-endpoint is a consent-phish/recon tell, not a domain-reputation one). Live
-redirect-following / cert inspection is a hook (off by default; the gateway
-runs it from the isolated egress path)."""
+endpoint is a consent-phish/recon tell, not a domain-reputation one). Trusted-
+channel brand lure / TestFlight service abuse lives in deception.py (composed
+structure), not here. Live redirect-following / cert inspection is a hook
+(off by default; the gateway runs it from the isolated egress path)."""
 from __future__ import annotations
 
 import html
@@ -22,7 +23,20 @@ from ..domainutils import registrable_domain, normalize_confusables, levenshtein
 
 RISKY_TLDS = {"zip", "mov", "xyz", "top", "click", "country", "gq", "tk", "ml"}
 BRAND_KEYWORDS = ("login", "secure", "verify", "account", "signin", "update", "wallet")
+
+# Known link-shortener registrable domains. Used both for a mild url-stage flag
+# and — crucially — to feed the behavioral correlation store (see correlation.py).
+SHORTENER_DOMAINS = frozenset({
+    "bit.ly", "tinyurl.com", "t.co", "ow.ly", "goo.gl", "short.io",
+    "tiny.cc", "is.gd", "buff.ly", "rebrand.ly", "cutt.ly", "rb.gy",
+    "snip.ly", "linktr.ee", "tr.im", "cli.gs", "j.mp", "youtu.be",
+    "fb.me", "wp.me", "adf.ly",
+})
 _IP_HOST = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+# Outlook Safe Links rewriter hostname pattern
+_SAFE_LINKS_HOST = re.compile(r"\.safelinks\.protection\.outlook\.com$", re.I)
+# FTP scheme
+_FTP_RE = re.compile(r"^ftps?://", re.I)
 
 # Query-parameter names commonly used to carry a redirect target. Legitimate
 # click-trackers use these too, so the parameter alone is not a verdict — but
@@ -95,6 +109,7 @@ def run(pe: ParsedEmail, protected_domains: list[str]) -> StageResult:
     sender_dom = registrable_domain(pe.from_domain)
     url_records = []
     embedded_found = []
+    shortener_domains: list = []
 
     # Expand the analysis set: every surface URL plus anything hidden inside it.
     analysis_set = [(u, None) for u in surface_urls]
@@ -121,6 +136,10 @@ def run(pe: ParsedEmail, protected_domains: list[str]) -> StageResult:
         if emb:
             rec["embedded_via"] = emb["param"]
             rec["wrapper_domain"] = emb["wrapper_domain"]
+
+        if not is_ip and reg in SHORTENER_DOMAINS:
+            flags.append(f"url_link_shortener:{reg}"); score += 5
+            shortener_domains.append(reg)
 
         if is_ip:
             flags.append("url_ip_literal"); score += 20; rec["ip_literal"] = True
@@ -173,9 +192,35 @@ def run(pe: ParsedEmail, protected_domains: list[str]) -> StageResult:
 
         url_records.append(rec)
 
+    # FTP/FTPS URLs are almost never used in legitimate email — flag them.
+    for url, _ in analysis_set:
+        if _FTP_RE.match(url):
+            flags.append("url_ftp_scheme"); score += 15
+            break
+
     mismatches = pe.anchor_mismatches()
     if mismatches:
         flags.append("anchor_href_mismatch"); score += 25
+
+    # --- Tracking beacons / pixels ---
+    # These are external resources that load automatically on open (not clicked
+    # links), used to confirm email delivery and capture the reader's IP.
+    beacons = pe.tracking_beacons()
+    beacon_records = []
+    beacon_domains: set[str] = set()
+    for b in beacons:
+        bhost = _host(b["url"])
+        breg = "" if _IP_HOST.search(bhost) else registrable_domain(bhost)
+        # Skip beacons that resolve to a sender-owned or protected domain —
+        # those are first-party analytics, not covert tracking.
+        if breg and breg != sender_dom and breg not in protected:
+            beacon_records.append({**b, "host": bhost, "reg_domain": breg})
+            beacon_domains.add(breg)
+
+    if beacon_records:
+        flags.append("tracking_beacon_detected"); score += 5
+        for bd in beacon_domains:
+            flags.append(f"url_tracking_beacon:{bd}")
 
     return StageResult(
         stage="urls",
@@ -183,7 +228,10 @@ def run(pe: ParsedEmail, protected_domains: list[str]) -> StageResult:
         sub_score=min(score, 100.0),
         red_flags=sorted(set(flags)),
         facts={"url_count": len(surface_urls), "embedded_count": len(embedded_found),
-               "urls": url_records,
-               "embedded": embedded_found, "anchor_mismatches": mismatches},
+               "urls": url_records, "embedded": embedded_found,
+               "anchor_mismatches": mismatches,
+               "shortener_domains": sorted(set(shortener_domains)),
+               "tracking_beacons": beacon_records,
+               "beacon_domains": sorted(beacon_domains)},
         latency_ms=int((time.perf_counter() - t0) * 1000),
     )

@@ -14,9 +14,10 @@ from typing import Optional
 
 from .domainutils import registrable_domain
 
-_URL_RE = re.compile(r'https?://[^\s"\'<>)\]]+', re.IGNORECASE)
+_URL_RE = re.compile(r'(?:https?|ftps?)://[^\s"\'<>)\]]+', re.IGNORECASE)
 _BRACKETED_IP_RE = re.compile(r"\[(\d{1,3}(?:\.\d{1,3}){3})\]")
 _AUTH_SENDER_RE = re.compile(r"Authenticated sender:\s*([\w.+-]+@[\w.-]+\.\w+)", re.I)
+_BODY_EMAIL_RE = re.compile(r'\b([\w.+-]+@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})\b')
 
 
 def _is_public_ip(ip: str) -> bool:
@@ -35,13 +36,18 @@ class _LinkExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.links: list[tuple[str, str]] = []   # (href, anchor_text)
+        self.originalsrc_links: list[str] = []   # Outlook Safe Links original URLs
         self._href: Optional[str] = None
         self._text: list[str] = []
 
     def handle_starttag(self, tag, attrs):
         if tag == "a":
-            self._href = dict(attrs).get("href")
+            attr_dict = dict(attrs)
+            self._href = attr_dict.get("href")
             self._text = []
+            orig = attr_dict.get("originalsrc", "")
+            if orig and orig.lower().startswith(("http://", "https://")):
+                self.originalsrc_links.append(orig)
 
     def handle_data(self, data):
         if self._href is not None:
@@ -51,6 +57,31 @@ class _LinkExtractor(HTMLParser):
         if tag == "a" and self._href:
             self.links.append((self._href, "".join(self._text).strip()))
             self._href = None
+
+
+_BEACON_ATTRS = ("src", "background", "data-src", "poster")
+_SKIP_SCHEMES = ("cid:", "data:", "blob:", "#", "javascript:")
+
+
+class _BeaconExtractor(HTMLParser):
+    """Extracts resource-loading URLs from HTML attributes — tracking pixels/beacons."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.beacons: list[dict] = []   # {url, tag, attr}
+
+    def handle_starttag(self, tag, attrs):
+        attr_dict = dict(attrs)
+        for attr_name in _BEACON_ATTRS:
+            val = (attr_dict.get(attr_name) or "").strip()
+            if not val:
+                continue
+            low = val.lower()
+            if not (low.startswith("http://") or low.startswith("https://")):
+                continue
+            if any(low.startswith(s) for s in _SKIP_SCHEMES):
+                continue
+            self.beacons.append({"url": val, "tag": tag, "attr": attr_name})
 
 
 class Attachment:
@@ -188,8 +219,50 @@ class ParsedEmail:
             except Exception:
                 pass
             for href, _ in ex.links:
-                if href.lower().startswith("http"):
+                low = href.lower()
+                if low.startswith("http") or low.startswith("ftp"):
                     found.add(href)
+            # Include Safe Links original URLs so the real destination is analyzed
+            for orig in ex.originalsrc_links:
+                found.add(orig)
+        return sorted(found)
+
+    def tracking_beacons(self) -> list[dict]:
+        """External resource-loading URLs (tracking pixels/beacons) from the HTML body.
+        Returns [{url, tag, attr}]. These load automatically when the email is opened."""
+        html = self.html_body()
+        if not html:
+            return []
+        ex = _BeaconExtractor()
+        try:
+            ex.feed(html)
+        except Exception:
+            pass
+        return ex.beacons
+
+    def safe_links_originals(self) -> list[str]:
+        """Original URLs from Outlook Safe Links rewritten hrefs (originalsrc attribute)."""
+        html = self.html_body()
+        if not html:
+            return []
+        ex = _LinkExtractor()
+        try:
+            ex.feed(html)
+        except Exception:
+            pass
+        return ex.originalsrc_links
+
+    def body_email_addrs(self) -> list[str]:
+        """Email addresses found in the message body (text + HTML), excluding From/To headers.
+        These are often IOCs in phishing: spoofed contact addresses, attacker mailboxes."""
+        found: set[str] = set()
+        for text in (self.text_body(), self.html_body()):
+            for addr in _BODY_EMAIL_RE.findall(text):
+                found.add(addr.lower())
+        # Remove legitimate envelope addresses — they're not "found in body" IOCs
+        found.discard(self.from_addr)
+        for addr in self.to_addrs:
+            found.discard(addr)
         return sorted(found)
 
     def anchor_mismatches(self) -> list[dict]:

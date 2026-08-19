@@ -117,13 +117,34 @@ class IntelCache:
                     "VALUES (?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT(indicator, source) DO UPDATE SET "
                     "verdict=excluded.verdict, checked_at=excluded.checked_at, raw_response=excluded.raw_response",
-                    (indicator, indicator_type, source, verdict, time.time(), raw_response[:4000]),
+                    (indicator, indicator_type, source, verdict, time.time(), raw_response[:8000]),
                 )
                 conn.commit()
             finally:
                 conn.close()
         except (sqlite3.Error, OSError):
             pass   # caching is an optimization, never a hard requirement
+
+    def get_raw_response(self, indicator: str, source: str) -> Optional[str]:
+        """Returns the cached raw_response blob if fresh, else None."""
+        try:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT raw_response, checked_at FROM intel_cache "
+                    "WHERE indicator = ? AND source = ?",
+                    (indicator, source),
+                ).fetchone()
+                if row is None:
+                    return None
+                raw_response, checked_at = row
+                if (time.time() - checked_at) > self.ttl_seconds:
+                    return None
+                return raw_response
+            finally:
+                conn.close()
+        except (sqlite3.Error, OSError):
+            return None
 
 
 class VTAbuseIPDBIntelClient:
@@ -182,9 +203,13 @@ class VTAbuseIPDBIntelClient:
             time.sleep(self._vt_min_interval - elapsed)
         self._vt_last_call = time.time()
 
-    def _vt_check(self, path: str, indicator: str, indicator_type: str) -> Optional[bool]:
+    def _vt_check(self, path: str, indicator: str, indicator_type: str,
+                  save_details: bool = False) -> Optional[bool]:
         """Returns True (malicious), False (clean), or None (degraded/error —
-        caller should not trust this result either way)."""
+        caller should not trust this result either way).
+
+        When save_details=True (domain checks), the full VT attributes are also
+        cached so get_domain_details() can retrieve them without a second API call."""
         cached = self.cache.get(indicator, indicator_type, "virustotal")
         if cached is not None:
             return cached == "malicious"
@@ -197,11 +222,85 @@ class VTAbuseIPDBIntelClient:
         )
         if status != 200 or not data:
             return None
-        stats = (data.get("data", {}).get("attributes", {}) or {}).get("last_analysis_stats", {})
+        attrs = (data.get("data", {}).get("attributes", {}) or {})
+        stats = attrs.get("last_analysis_stats", {})
         malicious = bool(stats) and stats.get("malicious", 0) >= self._VT_MALICIOUS_THRESHOLD
         self.cache.put(indicator, indicator_type, "virustotal",
                        "malicious" if malicious else "clean", json.dumps(stats))
+        if save_details:
+            details = {
+                "categories": attrs.get("categories", {}),
+                "reputation": attrs.get("reputation", 0),
+                "creation_date": attrs.get("creation_date"),
+                "registrar": attrs.get("registrar"),
+                "last_analysis_stats": stats,
+                "tags": attrs.get("tags", []),
+                "total_votes": attrs.get("total_votes", {}),
+            }
+            self.cache.put(f"details:{indicator}", "domain_details", "virustotal",
+                           "ok", json.dumps(details))
         return malicious
+
+    def _vt_url_check(self, url: str) -> Optional[bool]:
+        """URL-specific check: lookup existing report, submit for scanning on 404."""
+        cached = self.cache.get(url, "url", "virustotal")
+        if cached is not None:
+            return cached == "malicious"
+        if not self.vt_api_key:
+            return None
+        url_id = self._vt_url_id(url)
+        self._vt_throttle()
+        status, data = self._http_get(
+            f"https://www.virustotal.com/api/v3/urls/{url_id}",
+            {"x-apikey": self.vt_api_key},
+        )
+        if status == 200 and data:
+            attrs = (data.get("data", {}).get("attributes", {}) or {})
+            stats = attrs.get("last_analysis_stats", {})
+            malicious = bool(stats) and stats.get("malicious", 0) >= self._VT_MALICIOUS_THRESHOLD
+            self.cache.put(url, "url", "virustotal",
+                           "malicious" if malicious else "clean", json.dumps(stats))
+            return malicious
+        elif status == 404:
+            # URL not yet in VT — submit for scanning (fire-and-forget)
+            self._vt_submit_url(url)
+            return None   # not an error; result available on next check
+        return None
+
+    def _vt_submit_url(self, url: str) -> None:
+        """Submits a URL to VT for scanning. Fire-and-forget; result available later."""
+        submit_key = f"submitted:{url[:200]}"
+        if self.cache.get(submit_key, "url_submission", "virustotal") == "submitted":
+            return
+        if not self.vt_api_key:
+            return
+        import urllib.parse as _up
+        body = _up.urlencode({"url": url}).encode("ascii")
+        req = urllib.request.Request(
+            "https://www.virustotal.com/api/v3/urls",
+            data=body,
+            headers={
+                "x-apikey": self.vt_api_key,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in (200, 201):
+                    self.cache.put(submit_key, "url_submission", "virustotal", "submitted")
+        except Exception:
+            pass   # submission failure is non-fatal
+
+    def get_domain_details(self, domain: str) -> Optional[dict]:
+        """Returns cached VT domain details (categories, reputation, etc.) if available.
+        Populated by _vt_check(..., save_details=True) which check() calls for domains."""
+        raw = self.cache.get_raw_response(f"details:{domain}", "virustotal")
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return None
 
     def _abuseipdb_check(self, ip: str) -> Optional[bool]:
         cached = self.cache.get(ip, "ip", "abuseipdb")
@@ -233,7 +332,7 @@ class VTAbuseIPDBIntelClient:
         any_error = False
 
         for d in set(domains or []):
-            result = self._vt_check(f"domains/{d}", d, "domain")
+            result = self._vt_check(f"domains/{d}", d, "domain", save_details=True)
             if result is None and self.vt_api_key:
                 any_error = True
             elif result:
@@ -248,9 +347,14 @@ class VTAbuseIPDBIntelClient:
                 hits.append(f"intel_ip:{ip}")
 
         for u in set(urls or []):
-            result = self._vt_check(f"urls/{self._vt_url_id(u)}", u, "url")
+            result = self._vt_url_check(u)
             if result is None and self.vt_api_key:
-                any_error = True
+                # Check if it was a 404+submission (not an error) vs a real failure.
+                # A submitted URL has a "submitted:" cache entry; a real error has none.
+                submit_key = f"submitted:{u[:200]}"
+                submitted = self.cache.get(submit_key, "url_submission", "virustotal")
+                if submitted != "submitted":
+                    any_error = True
             elif result:
                 hits.append(f"intel_url:{u}")
 
@@ -280,42 +384,63 @@ def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
     t0 = time.perf_counter()
     domains = [pe.from_domain] + [u.get("reg_domain", "") for u in url_stage_facts.get("urls", [])]
     domains = [d for d in domains if d]
-    # IP-literal URL hosts + public IPs from the Received chain — previously
-    # always passed as [] here, meaning IP-based intel matching was
-    # structurally impossible regardless of what the IntelClient supported.
+
+    # Also check domains of email addresses found in the message body.
+    # Phishing mails often embed attacker mailboxes or fake contact addresses
+    # that resolve to known-bad infrastructure.
+    body_email_doms = list({
+        addr.split("@")[1]
+        for addr in pe.body_email_addrs()
+        if "@" in addr
+    })
+    all_domains = list(set(domains + body_email_doms))
+
+    # IP-literal URL hosts + public IPs from the Received chain
     ips = [u.get("ip", "") for u in url_stage_facts.get("urls", [])] + pe.originating_ips()
     ips = [i for i in ips if i]
     urls = [u.get("url", "") for u in url_stage_facts.get("urls", [])]
     hashes = [a.get("sha256", "") for a in attach_facts.get("attachments", [])]
 
-    hits, degraded = client.check(domains, ips, urls, hashes)
+    hits, degraded = client.check(all_domains, ips, urls, hashes)
 
-    # Local verdict-history correlation (Correlated Intelligence, standalone
-    # half — see correlation.py). Reuses the exact same IOC-candidate list
-    # already assembled above rather than re-deriving it.
-    correlation_flags = []
+    # Domain reputation details — populated by VTAbuseIPDBIntelClient.check() via
+    # save_details=True. Fall back silently if the client doesn't support this.
+    domain_details: dict = {}
+    if hasattr(client, "get_domain_details"):
+        for d in set(all_domains):
+            details = client.get_domain_details(d)
+            if details:
+                domain_details[d] = details
+
+    # Behavioral correlation — reference only, does NOT contribute to score or
+    # verdict. Results surface in the Analyze tab's Behavioral Correlation panel.
+    behavioral_details = []
+    behavioral_flags = []
     if correlation_store is not None:
-        senders = [pe.from_addr] if pe.from_addr else []
-        correlation_flags = correlation_store.lookup(
-            domains=domains, ips=ips, urls=urls, hashes=hashes, senders=senders)
+        shortener_domains = url_stage_facts.get("shortener_domains", [])
+        behavioral_details = correlation_store.behavioral_details(
+            sender=(pe.from_addr or "").lower(),
+            originating_ips=pe.originating_ips(),
+            shortener_domains=shortener_domains,
+        )
+        behavioral_flags = [
+            f"{d['rule']}:{d['ioc_value']}:{d['behavioral_count']}"
+            for d in behavioral_details
+        ]
 
-    all_flags = hits + correlation_flags
-    if hits:
-        score = 90.0   # a real external intel hit — strong signal (hard override in verdict.py)
-    elif correlation_flags:
-        # Weighted-only: "PDAX flagged this before" is real signal but
-        # lower-confidence than an external hit — capped well below the
-        # external-hit score so it can never look like one on its own.
-        score = min(35.0 * len(correlation_flags), 75.0)
-    else:
-        score = 0.0
+    # Only real external intel hits affect scoring — behavioral is reference only.
+    score = 90.0 if hits else 0.0
 
     return StageResult(
         stage="intel",
         status=StageStatus.DEGRADED if degraded else StageStatus.OK,
         sub_score=score,
-        red_flags=all_flags,
-        facts={"checked_domains": sorted(set(domains)), "checked_ips": sorted(set(ips)),
-               "hits": hits, "correlation_hits": correlation_flags},
+        red_flags=hits,  # behavioral flags intentionally excluded from red_flags
+        facts={"checked_domains": sorted(set(all_domains)), "checked_ips": sorted(set(ips)),
+               "hits": hits,
+               "domain_details": domain_details,
+               "body_email_domains": sorted(set(body_email_doms)),
+               "behavioral_hits": behavioral_flags,
+               "behavioral_details": behavioral_details},
         latency_ms=int((time.perf_counter() - t0) * 1000),
     )

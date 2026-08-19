@@ -60,6 +60,7 @@ class HeaderFacts(BaseModel):
     reply_to_domain: str = ""
     return_path_mismatch: bool = False
     reply_to_divergent: bool = False
+    reply_to_freemail: bool = False
     message_id_domain: str = ""
     # Advanced Spam Protection (TMES policy parity) — bulk-mail signals,
     # distinct from the auth/spoofing facts above.
@@ -67,6 +68,14 @@ class HeaderFacts(BaseModel):
     list_unsubscribe_one_click: bool = False   # RFC 8058
     precedence_bulk: bool = False
     has_list_id: bool = False
+    # Extended header signals
+    display_name_domain_impersonation: bool = False
+    missing_message_id: bool = False
+    missing_mime_version: bool = False
+    date_anomaly: str = ""          # "" | "future" | "stale"
+    suspicious_x_mailer: bool = False
+    x_mailer_value: str = ""
+    max_hop_delay_hours: float = 0.0
 
 
 class IOCSet(BaseModel):

@@ -7,16 +7,47 @@ active-content tokens, entropy) — TMES policy parity: this stage feeds both
 Malware Scanning (forensics_* flags) and File Blocking (banned_attachment*,
 and forensics-derived spoof detection, see verdict.py). Live VT hash lookups
 are still a hook for the gateway build (see intel.py's IntelClient instead,
-which does the hash reputation half of Malware Scanning)."""
+which does the hash reputation half of Malware Scanning).
+
+Optionally uses oletools (pip install oletools) for deeper VBA macro analysis
+when the package is available — gracefully degrades when it's not."""
 from __future__ import annotations
 
 import time
 
 from ..models import StageResult, StageStatus
 from ..parsed_email import ParsedEmail
-from ..attachment_forensics import analyze_attachment
+from ..attachment_forensics import analyze_attachment, MACRO_EXT
 from . import policy as policy_mod
 from . import sandbox as sandbox_mod
+
+try:
+    import oletools.olevba as _olevba
+    _OLETOOLS_AVAILABLE = True
+except ImportError:
+    _OLETOOLS_AVAILABLE = False
+
+
+def _run_olevba(filename: str, payload: bytes) -> dict:
+    """Run olevba static analysis on a file. Returns {} on error or if unavailable."""
+    if not _OLETOOLS_AVAILABLE or not payload:
+        return {}
+    try:
+        parser = _olevba.VBA_Parser(filename or "document", data=payload)
+        if not parser.detect_vba_macros():
+            parser.close()
+            return {"has_vba": False}
+        suspicious = []
+        for (macro_type, keyword, description) in parser.analyze_macros():
+            suspicious.append({
+                "type": str(macro_type),
+                "keyword": str(keyword)[:80],
+                "description": str(description)[:120],
+            })
+        parser.close()
+        return {"has_vba": True, "suspicious": suspicious}
+    except Exception:
+        return {}
 
 # Fallback only — production loads this from rules/banned_extensions.txt
 # (File Blocking, TMES policy parity; data, not code, per CLAUDE.md's
@@ -92,6 +123,22 @@ def run(pe: ParsedEmail, severity_points: dict = None, banned_ext=None,
         if "double_extension_executable" in forensics["risk_flags"]:
             flags.append(f"double_extension_executable:{a.filename}")
         embedded_urls.extend(forensics.get("embedded_urls") or [])
+
+        # oletools deeper VBA analysis for OLE/macro-capable files
+        is_ole_candidate = (
+            a.extension in MACRO_EXT
+            or a.extension in {"doc", "xls", "ppt"}
+            or forensics.get("detected_type") == "ole_compound"
+        )
+        if is_ole_candidate:
+            ot = _run_olevba(a.filename, a.payload)
+            if ot.get("has_vba"):
+                rec["oletools"] = ot
+                if not any(f in flags for f in ("forensics_office_macro",)):
+                    flags.append("oletools_vba_macro_detected"); score += 15
+                suspicious_keywords = {item["type"] for item in ot.get("suspicious", [])}
+                if suspicious_keywords & {"AutoExec", "Shell", "WScript.Shell", "PowerShell"}:
+                    flags.append("oletools_autoexec_or_shell"); score += 25
 
         if detonate_enabled:
             sb_score, sb_findings, sb_facts = sandbox_provider.detonate(

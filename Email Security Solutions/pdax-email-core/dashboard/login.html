@@ -5,72 +5,76 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in — Secure Email Gateway</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext y='20' font-size='20'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
 <style>
   :root {
     color-scheme: light dark;
-    --page: #f9f9f7; --surface: #fcfcfb; --surface-raised: #ffffff; --ink: #0b0b0b; --ink-secondary: #52514e;
-    --ink-muted: #898781; --border: rgba(11,11,11,0.10); --border-strong: rgba(11,11,11,0.16); --accent: #4a3aa7;
-    --accent-ink: #ffffff; --accent-wash: rgba(74, 58, 167, 0.08); --status-critical: #d03b3b;
-    --status-critical-bg: rgba(208, 59, 59, 0.10);
-    --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 8px 24px -12px rgba(11, 11, 11, 0.18);
-    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --page: #f0f4f8; --surface: #ffffff; --ink: #0f172a; --ink-secondary: #475569;
+    --ink-muted: #94a3b8; --border: rgba(15,23,42,0.10); --border-strong: rgba(15,23,42,0.16);
+    --accent: #0f766e; --accent-2: #0369a1; --accent-ink: #ffffff;
+    --accent-wash: rgba(15, 118, 110, 0.10); --status-critical: #dc2626;
+    --status-critical-bg: rgba(220, 38, 38, 0.10);
+    --shadow: 0 20px 50px -20px rgba(15, 23, 42, 0.25);
+    --font: "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --radius: 16px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --page: #0d0d0d; --surface: #171716; --surface-raised: #1e1e1c; --ink: #ffffff; --ink-secondary: #c3c2b7;
-      --ink-muted: #8f8d86; --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18);
-      --accent: #9085e9; --accent-ink: #14121f; --accent-wash: rgba(144, 133, 233, 0.14);
-      --status-critical: #d03b3b; --status-critical-bg: rgba(230, 103, 103, 0.14);
-      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+      --page: #0b1220; --surface: #111827; --ink: #f1f5f9; --ink-secondary: #cbd5e1;
+      --ink-muted: #64748b; --border: rgba(248,250,252,0.08); --border-strong: rgba(248,250,252,0.16);
+      --accent: #2dd4bf; --accent-2: #38bdf8; --accent-ink: #042f2e;
+      --accent-wash: rgba(45, 181, 176, 0.14);
+      --status-critical: #f87171; --status-critical-bg: rgba(248, 113, 113, 0.12);
+      --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.65);
     }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
     background:
-      radial-gradient(560px 380px at 15% 8%, var(--accent-wash), transparent 60%),
-      radial-gradient(480px 320px at 88% 92%, var(--accent-wash), transparent 60%),
+      radial-gradient(900px 480px at 10% -10%, var(--accent-wash), transparent 55%),
+      radial-gradient(700px 400px at 100% 0%, rgba(3,105,161,0.08), transparent 50%),
       var(--page);
     color: var(--ink);
-    font: 15px/1.5 var(--font-sans);
+    font: 15px/1.5 var(--font);
     padding: 20px;
   }
-  .wrap { width: min(380px, 100%); }
-  .brand-lockup { display: flex; align-items: center; gap: 11px; margin: 0 2px 20px; }
+  .wrap { width: min(400px, 100%); }
+  .brand-lockup { display: flex; align-items: center; gap: 12px; margin: 0 2px 22px; }
   .brand-mark {
-    width: 34px; height: 34px; border-radius: 9px; background: var(--accent);
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
     display: grid; place-items: center; flex: none; box-shadow: var(--shadow);
   }
-  .brand-mark svg { width: 19px; height: 19px; color: #fff; }
-  .brand-name { font-size: 14.5px; font-weight: 650; letter-spacing: -0.01em; }
-  .brand-sub { font-size: 11.5px; color: var(--ink-muted); letter-spacing: 0.02em; margin-top: 1px; }
+  .brand-mark svg { width: 20px; height: 20px; color: #fff; }
+  .brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+  .brand-sub { font-size: 11px; color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; font-weight: 500; }
   .card {
-    background: var(--surface-raised); border: 1px solid var(--border);
-    border-radius: 16px; padding: 30px 28px 28px; box-shadow: var(--shadow);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px 26px; box-shadow: var(--shadow);
   }
-  h1 { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 4px; }
-  .sub { color: var(--ink-muted); font-size: 13px; margin: 0 0 22px; line-height: 1.5; }
-  label { display: block; font-size: 11.5px; font-weight: 650; letter-spacing: 0.01em; color: var(--ink-secondary); margin: 14px 0 6px; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.03em; margin: 0 0 4px; }
+  .sub { color: var(--ink-muted); font-size: 13.5px; margin: 0 0 22px; line-height: 1.5; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-secondary); margin: 14px 0 6px; }
   input {
-    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-strong);
+    width: 100%; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--border-strong);
     background: var(--page); color: var(--ink); font-size: 14px; font-family: inherit;
-    transition: border-color 0.12s ease;
   }
-  input::placeholder { color: var(--ink-muted); }
   input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
   button {
-    width: 100%; margin-top: 22px; padding: 11px 12px; border-radius: 8px; border: none;
-    background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 650; cursor: pointer;
-    font-family: inherit; transition: opacity 0.12s ease, transform 0.08s ease;
+    width: 100%; margin-top: 22px; padding: 12px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink);
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
   }
-  button:hover:not(:disabled) { opacity: 0.92; }
-  button:active:not(:disabled) { transform: translateY(1px); }
+  button:hover:not(:disabled) { filter: brightness(1.05); }
   button:disabled { opacity: 0.55; cursor: default; }
   .error {
     display: none; color: var(--status-critical); background: var(--status-critical-bg);
-    font-size: 12.5px; margin-top: 14px; padding: 9px 11px; border-radius: 8px; line-height: 1.5;
+    font-size: 13px; margin-top: 14px; padding: 10px 12px; border-radius: 10px;
   }
-  .footnote { text-align: center; font-size: 11.5px; color: var(--ink-muted); margin-top: 18px; }
+  .footnote { text-align: center; font-size: 12px; color: var(--ink-muted); margin-top: 18px; }
 </style>
 </head>
 <body>
@@ -109,7 +113,7 @@
   fetch("/api/org").then(function (r) { return r.json(); }).then(function (org) {
     var el = document.getElementById("brandName");
     if (el && org.display_name) el.textContent = org.display_name + " Secure Email Gateway Service (SEGS)";
-  }).catch(function () { /* keep the static default */ });
+  }).catch(function () {});
 
   fetch("/api/setup/status").then(function (r) { return r.json(); }).then(function (d) {
     if (d.needs_setup) {

@@ -6,9 +6,14 @@ Run: python3 -m pytest tests/test_server_feed_api.py
      (or python3 tests/test_server_feed_api.py)
 """
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
+
+# Keep unit tests offline — never call live GLM during CI/local suite.
+os.environ["SEG_DASHBOARD_LLM"] = "0"
+os.environ["SEG_DASHBOARD_DEEP"] = "0"
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -203,7 +208,7 @@ def test_release_missing_entry_404():
     assert r.status_code == 404
 
 
-def test_reevaluate_forces_heuristic_provider_and_updates_meta():
+def test_reevaluate_uses_dashboard_provider_and_updates_meta():
     root = _tmp_spool()
     raw = (_FIXTURES / "phish_lookalike.eml").read_bytes()
     _seed_entry(root, "quarantine", "q1",
@@ -226,6 +231,33 @@ def test_feed_refresh_rebuilds_cache():
     r2 = client.post("/api/feed/refresh").json()
     assert len(r1["entries"]) == len(r2["entries"])
     feed_builder._SAMPLES_DIR = _ROOT / "samples"
+
+
+def test_audit_merges_gateway_shadow_and_activity():
+    root = _tmp_spool()
+    (root / "shadow_logs").mkdir(parents=True)
+    (root / "shadow_logs" / "shadow_enforcement.jsonl").write_text(
+        '{"ts": "2026-08-13T00:00:00Z", "verdict": "MALICIOUS",'
+        ' "from": "a@b.com", "subject": "phish"}\n',
+        encoding="utf-8",
+    )
+    feed_builder._SPOOL_ROOT = root
+
+    from server import activity_log
+    path = Path(tempfile.mkdtemp()) / "activity_audit.jsonl"
+    orig = activity_log._DEFAULT_PATH
+    activity_log._DEFAULT_PATH = path
+    try:
+        activity_log.record("login", actor="admin", actor_role="admin", detail="Session started")
+        client = _client_as("admin", root)
+        entries = client.get("/api/audit").json()["entries"]
+        kinds = {e.get("kind") for e in entries}
+        assert "gateway" in kinds
+        assert "activity" in kinds
+        assert any(e.get("tag") == "Activity" for e in entries)
+        assert any(e.get("tag") == "Gateway" for e in entries)
+    finally:
+        activity_log._DEFAULT_PATH = orig
 
 
 if __name__ == "__main__":

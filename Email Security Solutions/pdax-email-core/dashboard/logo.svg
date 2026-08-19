@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 470">
+  <!-- Background — rounded square, no white corners -->
+  <rect width="400" height="470" rx="62" fill="#2A4F8C"/>
+
+  <!-- Padlock shackle / arch -->
+  <path d="M150 103 Q150 22 200 22 Q250 22 250 103"
+        fill="none" stroke="white" stroke-width="27" stroke-linecap="round"/>
+
+  <!-- Shield outline (white border, navy fill so envelope shows through) -->
+  <path d="M56 98 Q56 76 200 73 Q344 76 344 98
+           L344 228 C344 270 270 308 200 308
+           C130 308 56 270 56 228 Z"
+        fill="#2A4F8C" stroke="white" stroke-width="13"/>
+
+  <!-- Envelope white fill -->
+  <rect x="104" y="110" width="192" height="135" rx="7" fill="white"/>
+
+  <!-- Envelope X diagonal lines (4 corners → centre) -->
+  <line x1="104" y1="110" x2="200" y2="177" stroke="#2A4F8C" stroke-width="11" stroke-linecap="round"/>
+  <line x1="296" y1="110" x2="200" y2="177" stroke="#2A4F8C" stroke-width="11" stroke-linecap="round"/>
+  <line x1="104" y1="245" x2="200" y2="177" stroke="#2A4F8C" stroke-width="11" stroke-linecap="round"/>
+  <line x1="296" y1="245" x2="200" y2="177" stroke="#2A4F8C" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- Mini padlock arch (dark, centred on envelope) -->
+  <path d="M177 167 Q177 143 200 143 Q223 143 223 167"
+        fill="none" stroke="#2A4F8C" stroke-width="18" stroke-linecap="round"/>
+
+  <!-- Mini padlock body -->
+  <rect x="163" y="167" width="74" height="55" rx="10" fill="#2A4F8C"/>
+
+  <!-- Keyhole circle + slot -->
+  <circle cx="200" cy="190" r="8.5" fill="white"/>
+  <rect x="196.5" y="194" width="7" height="12" rx="2.5" fill="white"/>
+
+  <!-- "SEGS" wordmark -->
+  <text x="200" y="383"
+        text-anchor="middle"
+        font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="900" font-size="84" fill="white" letter-spacing="-1">SEGS</text>
+
+  <!-- Subtitle -->
+  <text x="200" y="422"
+        text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="19.5" fill="rgba(255,255,255,0.88)"
+        letter-spacing="1.2">SECURE EMAIL GATEWAY SERVICE</text>
+</svg>

@@ -24,6 +24,8 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .. import activity_log
+from ..auth_store import User
 from ..deps import require_role
 from app.pipeline import policy as policy_mod
 
@@ -89,7 +91,7 @@ def _rewrite_category_enabled(text: str, category: str, enabled: bool) -> str:
 
 
 @router.put("/policy")
-def put_policy(body: PolicyUpdate, _=Depends(require_role("admin"))):
+def put_policy(body: PolicyUpdate, admin: User = Depends(require_role("admin"))):
     if body.category not in policy_mod.ALL_CATEGORIES:
         raise HTTPException(status_code=422, detail=f"unknown category: {body.category!r}")
     if not _POLICY_PATH.is_file():
@@ -109,4 +111,10 @@ def put_policy(body: PolicyUpdate, _=Depends(require_role("admin"))):
         raise HTTPException(status_code=500, detail="policy rewrite validation failed — no changes written")
 
     _POLICY_PATH.write_text(updated)
+    state = "enabled" if body.enabled else "disabled"
+    activity_log.record(
+        "policy_update", actor=admin.username, actor_role=admin.role,
+        detail=f"{body.category} {state}",
+        meta={"category": body.category, "enabled": body.enabled},
+    )
     return _policy_response(parsed)

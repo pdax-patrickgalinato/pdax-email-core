@@ -100,6 +100,32 @@ def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict,
         result.composite_score = 95.0
         result.reasons = [f for f in urls.red_flags if f.startswith("url_lookalike")]
         return
+    # Trusted-channel deception structure (TestFlight / service abuse):
+    # authentic platform mail + foreign mega-brand lure. Auth always looks
+    # clean; weighted scoring would under-weight this. Always on.
+    dec = stage_by_name.get("deception")
+    if dec:
+        abuse_flags = [
+            f for f in dec.red_flags
+            if f == "deception_structure_service_abuse"
+            or f.startswith("service_abuse_")
+        ]
+        if abuse_flags:
+            # Prefer the composed flag name for hard_override when present.
+            override = (
+                "deception_structure_service_abuse"
+                if "deception_structure_service_abuse" in abuse_flags
+                else abuse_flags[0]
+            )
+            # Keep TestFlight-specific name when that is the only concrete alias
+            # (analyst/tests already key on it).
+            if "service_abuse_testflight_brand_lure" in abuse_flags:
+                override = "service_abuse_testflight_brand_lure"
+            result.hard_override = override
+            result.verdict = Verdict.MALICIOUS
+            result.composite_score = 95.0
+            result.reasons = sorted(set(abuse_flags))
+            return
     # File Blocking
     if (atts and any(f.startswith("banned_attachment") for f in atts.red_flags)
             and policy.is_enabled(policy_cfg, "file_blocking")):

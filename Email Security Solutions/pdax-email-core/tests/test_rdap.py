@@ -13,12 +13,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.parsed_email import ParsedEmail
 from app.pipeline import policy, sender
-from app.rdap_client import domain_age_days
+from app.rdap_client import domain_age_days, domain_rdap_summary
 
 
 def _rdap_response(days_ago, event_action="registration"):
     date = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
-    return 200, {"events": [{"eventAction": event_action, "eventDate": date}]}
+    return 200, {
+        "events": [{"eventAction": event_action, "eventDate": date}],
+        "status": ["client transfer prohibited"],
+        "entities": [{
+            "roles": ["registrar"],
+            "vcardArray": ["vcard", [["fn", {}, "text", "Example Registrar Inc."]]],
+        }],
+    }
 
 
 # --- app/rdap_client.py directly ---------------------------------------------
@@ -56,6 +63,21 @@ def test_domain_age_days_malformed_date_returns_none():
 def test_domain_age_days_empty_events_returns_none():
     http = lambda url: (200, {"events": []})
     assert domain_age_days("example.com", http_get=http) is None
+
+
+def test_domain_rdap_summary_includes_registrar_and_age():
+    http = lambda url: _rdap_response(100)
+    summary = domain_rdap_summary("example.com", http_get=http)
+    assert summary is not None
+    assert summary["domain"] == "example.com"
+    assert 99 <= summary["age_days"] <= 101
+    assert summary["registered"]
+    assert "Example Registrar" in summary["registrar"]
+    assert "client transfer prohibited" in summary["status"]
+
+
+def test_domain_rdap_summary_degrades_on_404():
+    assert domain_rdap_summary("missing.example", http_get=lambda url: (404, None)) is None
 
 
 # --- sender.py wiring ---------------------------------------------------------

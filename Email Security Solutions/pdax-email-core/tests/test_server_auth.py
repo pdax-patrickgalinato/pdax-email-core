@@ -192,6 +192,70 @@ def test_response_bodies_never_leak_password_hash():
         assert "salt" not in u
 
 
+def test_set_password_updates_hash_and_revokes_sessions():
+    store = _tmp_store()
+    user = store.create_user("bob", "oldpassword1", "analyst")
+    token = store.create_session(user.id)
+    assert store.resolve_session(token) is not None
+    store.set_password(user.id, "newpassword9")
+    assert store.verify_password("bob", "oldpassword1") is None
+    assert store.verify_password("bob", "newpassword9") is not None
+    assert store.resolve_session(token) is None
+
+
+def test_admin_can_reset_any_user_password():
+    store = _tmp_store()
+    client = _client_with_store(store)
+    client.post("/api/setup", json={"username": "admin", "password": "password123"})
+    client.post("/api/users", json={"username": "alice", "password": "password123", "role": "viewer"})
+    users = client.get("/api/users").json()
+    alice_id = next(u["id"] for u in users if u["username"] == "alice")
+    r = client.post(f"/api/users/{alice_id}/password", json={"password": "brandnew99"})
+    assert r.status_code == 200
+    assert store.verify_password("alice", "password123") is None
+    assert store.verify_password("alice", "brandnew99") is not None
+
+
+def test_analyst_cannot_reset_password_403():
+    store = _tmp_store()
+    client = _client_with_store(store)
+    client.post("/api/setup", json={"username": "admin", "password": "password123"})
+    store.create_user("ana", "password123", "analyst")
+    users = client.get("/api/users").json()
+    admin_id = next(u["id"] for u in users if u["username"] == "admin")
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username": "ana", "password": "password123"})
+    r = client.post(f"/api/users/{admin_id}/password", json={"password": "hackedpass1"})
+    assert r.status_code == 403
+    assert store.verify_password("admin", "password123") is not None
+
+
+def test_login_and_user_admin_write_activity_audit():
+    """Activity events land in an isolated audit JSONL path."""
+    from server import activity_log
+
+    path = Path(tempfile.mkdtemp()) / "activity_audit.jsonl"
+    orig = activity_log._DEFAULT_PATH
+    activity_log._DEFAULT_PATH = path
+    try:
+        store = _tmp_store()
+        client = _client_with_store(store)
+        client.post("/api/setup", json={"username": "admin", "password": "password123"})
+        client.post("/api/auth/logout")
+        client.post("/api/auth/login", json={"username": "admin", "password": "password123"})
+        client.post("/api/users", json={"username": "bob", "password": "password123", "role": "viewer"})
+        entries = activity_log.list_entries(path=path)
+        actions = [e["action"] for e in entries]
+        assert "setup" in actions
+        assert "login" in actions
+        assert "logout" in actions
+        assert "user_create" in actions
+        ui = [activity_log.to_audit_ui(e) for e in entries]
+        assert all(u["kind"] == "activity" and u["tag"] == "Activity" for u in ui)
+    finally:
+        activity_log._DEFAULT_PATH = orig
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0
@@ -200,5 +264,7 @@ if __name__ == "__main__":
             fn(); passed += 1; print(f"PASS {fn.__name__}")
         except AssertionError as e:
             print(f"FAIL {fn.__name__}: {e}")
+        except Exception as e:
+            print(f"ERROR {fn.__name__}: {type(e).__name__}: {e}")
     print(f"\n{passed}/{len(fns)} passed")
     sys.exit(0 if passed == len(fns) else 1)

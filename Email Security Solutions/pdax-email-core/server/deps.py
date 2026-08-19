@@ -15,10 +15,20 @@ from .auth_store import User, get_default_store
 SESSION_COOKIE_NAME = "seg_session"
 
 _store = get_default_store()
+_correlation_store = None
 
 
 def get_auth_store():
     return _store
+
+
+def set_correlation_store(store) -> None:
+    global _correlation_store
+    _correlation_store = store
+
+
+def get_correlation_store():
+    return _correlation_store
 
 
 def get_current_user(request: Request) -> User:

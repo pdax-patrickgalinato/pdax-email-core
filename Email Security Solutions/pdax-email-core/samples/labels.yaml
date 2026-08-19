@@ -156,3 +156,11 @@ labels:
       sharing — a routine VASP compliance workflow message, not attacker
       content. reply_to_divergent is the only signal and is explainable by
       routing through a compliance mailbox.
+
+  "testflight_no_reply.eml":
+    label: malicious
+    why: >
+      Authentic Apple TestFlight invite (email.apple.com, SPF pass) pushing a
+      beta app branded "OpenAI AdsGPT Ad Insights" — known TestFlight service-
+      abuse pattern (Sublime service_abuse_apple_testflight). Auth looks clean
+      on purpose; the lure is the brand impersonation, not an Apple spoof.

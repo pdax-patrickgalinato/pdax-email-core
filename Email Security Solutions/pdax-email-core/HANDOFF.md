@@ -5,6 +5,47 @@ next agent a prioritized backlog. Originally written at the point the user
 moved from the web chat into Claude Code; updated 2026-08-01 after the first
 Claude Code session implemented the real content-AI provider.
 
+## What changed 2026-08-17 — MSOC analysis gap closure
+
+Closed the gaps vs. Bantay/MSOC-style EML investigation reports on the deep
+agent path (`eml_analysis_agent` / Analyze tab / feed deep enrichment):
+
+1. **Landing-page fetch** — `app/landing_fetch.py`, opt-in `SEG_LANDING_FETCH=1`.
+   SSRF-guarded GET (max 3 URLs, 256 KB, 5 redirects). Extracts title, forms,
+   script hosts, final URL. Never raises; degraded facts on failure. HTML is
+   attacker-controlled input to the LLM (same prompt-injection posture).
+2. **Richer RDAP OSINT** — `domain_rdap_summary()` in `app/rdap_client.py`
+   (age, registered date, registrar, status). Agent attaches `domain_osint`
+   when `SEG_RDAP_LOOKUP=1`. Still **no LinkedIn/Google scraping** — prompt
+   requires explicit `osint_limitations`.
+3. **MSOC-shaped report** — agent schema adds `sender_legitimacy`,
+   `landing_page_analysis`, `investigation_findings`, `recommended_actions`;
+   `render_markdown()` emits numbered sections matching analyst write-ups.
+   Dashboard Analyze + feed deep preview surface findings/actions.
+
+Production note: enable landing fetch only from isolated egress (same Annex C
+guidance as live URL follow). Offline defaults remain off.
+
+**Follow-up same day — `finish_reason=length` on Analyze:** the larger MSOC
+JSON + GLM chain-of-thought exhausted the old 6000-token default (empty
+`content`). Deep agent default is now **12000** (`SEG_DEEP_MAX_TOKENS`
+override); `call_agent` retries with a higher budget on `finish_reason=length`
+instead of a useless empty-content repair loop.
+
+**Follow-up same day — TestFlight service abuse:** `testflight_no_reply.eml`
+(authentic `email.apple.com` + OpenAI AdsGPT lure) was CLEAN vs Sublime’s
+`service_abuse_apple_testflight`. Added deterministic
+`service_abuse_testflight_brand_lure` in `urls.py` + hard override in
+`verdict.py` → MALICIOUS. Sample labeled in `samples/labels.yaml`.
+
+**Follow-up — deception-structure generalization:** one-off TestFlight rule
+lifted into a reusable composer (`app/pipeline/deception.py`) driven by
+`rules/trusted_platforms.yaml` + `rules/impersonation_brands.txt`. Invariant:
+trusted channel + foreign brand lure (+ optional Reply-To freemail) — auth
+pass is expected. Flags: `trusted_channel_brand_mismatch`,
+`deception_structure_service_abuse`, alias `service_abuse_testflight_brand_lure`.
+Also `reply_to_freemail` in headers; freemail list in `rules/freemail_domains.txt`.
+
 ## The user
 
 Pat / Ronald Galinato — Cyber Defense team at **PDAX**, a BSP-supervised VASP
@@ -332,10 +373,11 @@ merge it in.
    are available in this environment — see "Not yet done" above.
 
 ### P2 — Enrichment stages that are currently static
-6. **Live URL analysis** (`urls.py`): optional redirect-following + TLS cert
-   inspection from an isolated egress path (Annex C requires this be a separate
-   NAT/IP, never corporate egress; for the POC a guarded `httpx` HEAD-first is
-   fine). Gate behind a flag; keep offline default.
+6. **Live URL analysis** (`urls.py` pipeline Stage 3): optional redirect-following
+   + TLS cert inspection still not wired into the scored pipeline. Agent-path
+   landing fetch is done (`app/landing_fetch.py` + `SEG_LANDING_FETCH=1`) —
+   remaining work is Stage-3 httpx HEAD/GET contributing weighted flags (not
+   verdict) from isolated egress.
 7. **Attachment deep parse** (`attachments.py`): `oletools` for macros,
    `pdfid`/`pikepdf` for PDF actions, recursive archive unpack with caps. Add VT
    **hash lookup only** (never upload PDAX documents to public sandboxes — RA

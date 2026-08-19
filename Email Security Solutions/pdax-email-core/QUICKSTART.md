@@ -266,6 +266,23 @@ didn't break the clean cases.
 
 ---
 
+## Deep analysis (MSOC-style) — optional network enrichments
+
+The dashboard **Analyze** tab and `eml_analysis_agent.py` can produce
+MSOC-style investigation findings + recommended actions. Offline defaults
+stay off; enable when you have isolated egress and GLM credentials:
+
+```bash
+export SEG_LANDING_FETCH=1   # live landing-page title/forms (SSRF-guarded)
+export SEG_RDAP_LOOKUP=1     # domain age/registrar for sender + link domains
+```
+
+Without these flags, the agent still analyzes headers, content, and
+display/URL mismatches — it will not invent live page titles or claim
+LinkedIn verification.
+
+---
+
 ## A note on the AI stage
 
 The `content_ai` stage currently uses simple keyword rules that run locally, so

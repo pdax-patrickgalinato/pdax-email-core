@@ -6,12 +6,13 @@ weights:
   headers: 20
   sender: 15
   urls: 20
+  deception: 20   # trusted-channel abuse / brand-vs-platform structure
   attachments: 15
-  content_ai: 10
+  content_ai: 15
   intel: 20        # weight applies to non-hit degraded cases; a hit is a hard override
 
 thresholds:
-  malicious: 70
+  malicious: 65
   suspicious: 45
   low: 20
 

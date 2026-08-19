@@ -181,13 +181,9 @@ def _verdict_margin(r: PipelineResult) -> str:
 
 
 def _ioc_context(r: PipelineResult) -> dict:
-    """Best-effort per-IOC context, built entirely from what this analysis
-    already computed — NOT a live reputation lookup. The real IntelClient
-    (VirusTotal/AbuseIPDB) is still a stub (see HANDOFF.md); don't present
-    this as more than it is. This exists to distinguish "this specific
-    indicator is why we flagged the email" from "this was merely observed
-    in transit" — e.g. a TrendMicro relay IP is expected infrastructure, not
-    a lead, while an intel-hit domain is exactly that."""
+    """Per-IOC context combining live VirusTotal/AbuseIPDB intel with rule-based
+    analysis findings. Distinguishes confirmed threat-intel hits from structural
+    anomalies observed during analysis."""
     notes: dict[str, str] = {}
     headers = r.stage("headers")
     sender = r.stage("sender")
@@ -264,66 +260,232 @@ def _ioc_lines(label: str, values: list, notes: dict) -> list:
     return out
 
 
-def text_report(r: PipelineResult) -> str:
-    lines = []
-    lines.append("=" * 64)
-    lines.append(f"  VERDICT: {r.verdict.value}   score={r.composite_score}{_verdict_margin(r)}")
-    if r.hard_override:
-        lines.append(f"  HARD OVERRIDE: {r.hard_override} — {_describe_flag(r.hard_override)}")
-    lines.append(f"  DISPOSITION: {r.disposition.value}   (enforce_mode={r.enforce_mode.value})")
-    if r.disposition_reason:
-        lines.append(f"  DISPOSITION REASON: {r.disposition_reason}")
-    if r.enforcement_applied:
-        lines.append(f"  ENFORCEMENT APPLIED: {r.enforcement_applied}")
-    lines.append("=" * 64)
-    lines.append(f"From    : {_sanitize(r.from_header)}")
-    lines.append(f"Subject : {_sanitize(r.subject)}")
-    lines.append(f"Source  : {r.source}")
-    lines.append("")
-    lines.append("Stages:")
-    ai_summary = None
-    for s in r.stages:
-        flags = ", ".join(s.red_flags) if s.red_flags else "-"
-        lines.append(f"  [{s.status.value:>8}] {s.stage:<12} score={s.sub_score:>5.1f}  {flags}")
-        # A degraded/errored stage (e.g. an AI provider outage or a bad API
-        # key) is otherwise silent here — you'd see "degraded" with no way
-        # to tell why. Surface the captured reason so this is diagnosable
-        # without dropping into --json.
-        err = s.facts.get("error") if isinstance(s.facts, dict) else None
-        if err:
-            lines.append(f"             reason: {_sanitize(str(err))}")
-        if isinstance(s.facts, dict) and s.facts.get("triage_skipped_llm"):
-            lines.append("             triage: heuristic-only — score not near a threshold boundary, LLM call skipped")
-        elif isinstance(s.facts, dict) and s.facts.get("triage_escalated"):
-            lines.append("             triage: escalated to LLM — heuristic-only score was near a threshold boundary")
-        if s.stage == "content_ai" and isinstance(s.facts, dict) and s.facts.get("summary"):
-            ai_summary = s.facts["summary"]
-    lines.append("")
-    if ai_summary:
-        # The AI provider's own one/two-sentence rationale — computed on
-        # every real (non-heuristic) run but previously thrown away. This is
-        # usually the single most useful line for "is this actually bad?".
-        lines.append(f"AI assessment: {_sanitize(ai_summary)}")
+def _md_table(rows: list, headers: list) -> str:
+    """Minimal Markdown table builder."""
+    if not rows:
+        return "_None._"
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            if i < len(widths):
+                widths[i] = max(widths[i], len(str(cell)))
+    def _pad(val: str, w: int) -> str:
+        return str(val).ljust(w)
+    header_row = "| " + " | ".join(_pad(h, widths[i]) for i, h in enumerate(headers)) + " |"
+    sep_row = "| " + " | ".join("-" * widths[i] for i in range(len(headers))) + " |"
+    data_rows = [
+        "| " + " | ".join(_pad(str(row[i]) if i < len(row) else "", widths[i])
+                           for i in range(len(headers))) + " |"
+        for row in rows
+    ]
+    return "\n".join([header_row, sep_row] + data_rows)
+
+
+def _intel_section(r: PipelineResult) -> list[str]:
+    """Builds the Threat Intelligence section from live VT/AbuseIPDB pipeline data."""
+    intel = r.stage("intel")
+    if not intel or not isinstance(intel.facts, dict):
+        return []
+
+    lines: list[str] = []
+    domain_details: dict = intel.facts.get("domain_details") or {}
+    hits: list = intel.facts.get("hits") or []
+    behavioral_hits: list = intel.facts.get("behavioral_hits") or []
+
+    # Confirmed threat-intel hits (VT/AbuseIPDB matched indicators)
+    confirmed_hits = [h for h in hits if not h.startswith("behavioral_")]
+    if confirmed_hits or domain_details or behavioral_hits:
+        lines += ["", "## Threat Intelligence", ""]
+        lines.append(
+            "_Live lookups performed by VirusTotal (domain/URL reputation) and "
+            "AbuseIPDB (IP reputation). Results are cached for 6 hours._"
+        )
+
+    if confirmed_hits:
+        lines += ["", "### Matched Known-Bad Indicators", ""]
+        for hit in confirmed_hits:
+            prefix, _, value = hit.partition(":")
+            if value:
+                desc = _describe_flag(hit)
+                lines.append(f"- **`{value}`** — {desc}")
         lines.append("")
-    lines.append("Why this verdict:")
+
+    if domain_details:
+        lines += ["### Domain Reputation (VirusTotal)", ""]
+        for domain, details in domain_details.items():
+            if not isinstance(details, dict):
+                continue
+            lines.append(f"#### `{domain}`")
+            lines.append("")
+            rep = details.get("reputation")
+            cats = details.get("categories") or {}
+            registrar = details.get("registrar") or "—"
+            created = details.get("creation_date") or "—"
+            tags = details.get("tags") or []
+            votes = details.get("total_votes") or {}
+            votes_mal = votes.get("malicious", 0)
+            votes_harm = votes.get("harmless", 0)
+
+            table_rows = [
+                ["Reputation score", str(rep) if rep is not None else "—"],
+                ["Registrar", registrar],
+                ["Registered", created],
+                ["VT community votes (malicious)", str(votes_mal)],
+                ["VT community votes (harmless)", str(votes_harm)],
+                ["Tags", ", ".join(tags) if tags else "—"],
+            ]
+            if cats:
+                cat_str = "; ".join(f"{engine}: {label}" for engine, label in list(cats.items())[:6])
+                table_rows.insert(1, ["Categories", cat_str])
+
+            lines.append(_md_table(table_rows, ["Field", "Value"]))
+            lines.append("")
+
+    if behavioral_hits:
+        lines += ["### Behavioral Pattern Alerts", ""]
+        for hit in behavioral_hits:
+            lines.append(f"- {_describe_flag(hit)}")
+        lines.append("")
+
+    return lines
+
+
+def text_report(r: PipelineResult) -> str:
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    icon = _ICON.get(r.verdict, "")
+    subject_safe = _sanitize(r.subject) or "(no subject)"
+    from_safe = _sanitize(r.from_header) or "(unknown)"
+
+    lines: list[str] = []
+
+    # ── Title ────────────────────────────────────────────────────────────────
+    lines += [
+        f"# SEGS Security Report — {subject_safe}",
+        "",
+        f"**Generated:** {generated}  ",
+        f"**Source file:** `{r.source}`  ",
+        "",
+        "---",
+    ]
+
+    # ── Executive Summary ─────────────────────────────────────────────────────
+    verdict_line = f"{icon} **{r.verdict.value}** — Composite Score: **{r.composite_score}/100**"
+    if _verdict_margin(r):
+        verdict_line += _verdict_margin(r)
+
+    lines += [
+        "",
+        "## Executive Summary",
+        "",
+        verdict_line,
+        "",
+        f"**Disposition:** {r.disposition.value}  ",
+        f"**Enforcement Mode:** {r.enforce_mode.value}  ",
+    ]
+    if r.disposition_reason:
+        lines.append(f"**Disposition Reason:** {r.disposition_reason}  ")
+    if r.enforcement_applied:
+        lines.append(f"**Enforcement Applied:** {r.enforcement_applied}  ")
+    if r.hard_override:
+        lines += [
+            "",
+            f"> **Hard Override:** `{r.hard_override}`  ",
+            f"> {_describe_flag(r.hard_override)}",
+        ]
+
+    ai_summary = next(
+        (s.facts["summary"] for s in r.stages
+         if s.stage == "content_ai" and isinstance(s.facts, dict) and s.facts.get("summary")),
+        None,
+    )
+    if ai_summary:
+        lines += ["", f"**AI Assessment:** {_sanitize(ai_summary)}"]
+
+    # ── Message Metadata ──────────────────────────────────────────────────────
+    lines += [
+        "",
+        "---",
+        "",
+        "## Message Metadata",
+        "",
+        _md_table([
+            ["From", from_safe],
+            ["Subject", subject_safe],
+            ["Source", r.source],
+            ["Message-ID", r.message_id or "—"],
+        ], ["Field", "Value"]),
+    ]
+
+    # ── Detection Findings by Stage ───────────────────────────────────────────
+    lines += ["", "---", "", "## Detection Findings by Stage", ""]
+    for s in r.stages:
+        status_icon = {"pass": "✅", "flag": "🚩", "degraded": "⚠️", "skipped": "⏭️"}.get(
+            s.status.value, "ℹ️")
+        lines.append(f"### {status_icon} {s.stage.replace('_', ' ').title()} — Score: {s.sub_score:.1f}")
+        lines.append("")
+        if s.red_flags:
+            flag_rows = [[f"`{flag}`", _describe_flag(flag)] for flag in s.red_flags]
+            lines.append(_md_table(flag_rows, ["Flag", "Description"]))
+        else:
+            lines.append("_No flags raised._")
+        if isinstance(s.facts, dict):
+            err = s.facts.get("error")
+            if err:
+                lines.append(f"\n> **Stage error:** {_sanitize(str(err))}")
+            if s.facts.get("triage_skipped_llm"):
+                lines.append("\n> _Triage: heuristic-only — score not near a threshold boundary, LLM call skipped._")
+            elif s.facts.get("triage_escalated"):
+                lines.append("\n> _Triage: escalated to LLM — heuristic-only score was near a threshold boundary._")
+        lines.append("")
+
+    # ── Verdict Explanation ───────────────────────────────────────────────────
+    lines += ["---", "", "## Verdict Explanation", ""]
     if r.reasons:
         for flag in r.reasons:
-            lines.append(f"  - {_describe_flag(flag)}")
+            lines.append(f"- {_describe_flag(flag)}")
     else:
-        lines.append("  - No red flags fired on any stage.")
-    lines.append("")
-    lines.append("Reasons (raw tags): " + (", ".join(r.reasons) if r.reasons else "none"))
-    lines.append("")
-    lines.append("IOCs:")
-    lines.append("  (context in [brackets] is this analysis's own rule-based findings — NOT")
-    lines.append("   a live threat-intel/reputation lookup; that provider is still a stub)")
+        lines.append("_No red flags were raised on any stage._")
+    lines += ["", f"**Raw signal tags:** `{'`, `'.join(r.reasons) if r.reasons else 'none'}`"]
+
+    # ── Threat Intelligence (VT / AbuseIPDB) ──────────────────────────────────
+    lines.extend(_intel_section(r))
+
+    # ── Indicators of Compromise ──────────────────────────────────────────────
     notes = _ioc_context(r)
-    lines.extend(_ioc_lines("senders ", r.iocs.sender_emails, notes))
-    lines.extend(_ioc_lines("domains ", r.iocs.domains, notes))
-    lines.extend(_ioc_lines("ips     ", r.iocs.ips, notes))
-    lines.extend(_ioc_lines("urls    ", r.iocs.urls, notes))
-    lines.extend(_ioc_lines("hashes  ", r.iocs.hashes_sha256, notes))
-    lines.extend(_ioc_lines("auth relay senders", r.iocs.authenticated_relay_senders, notes))
+    lines += ["", "---", "", "## Indicators of Compromise", ""]
+
+    def _md_ioc_section(label: str, values: list) -> None:
+        lines.append(f"**{label}**")
+        if not values:
+            lines.append("- _None observed._")
+            return
+        for v in values:
+            note = notes.get(str(v))
+            suffix = f" — _{note}_" if note else ""
+            lines.append(f"- `{v}`{suffix}")
+
+    _md_ioc_section("Sender addresses", r.iocs.sender_emails)
+    lines.append("")
+    _md_ioc_section("Domains", r.iocs.domains)
+    lines.append("")
+    _md_ioc_section("IP addresses", r.iocs.ips)
+    lines.append("")
+    _md_ioc_section("URLs", r.iocs.urls)
+    lines.append("")
+    _md_ioc_section("File hashes (SHA-256)", r.iocs.hashes_sha256)
+    lines.append("")
+    _md_ioc_section("Authenticated relay senders", r.iocs.authenticated_relay_senders)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
+    lines += [
+        "",
+        "---",
+        "",
+        "_Report generated by **SEGS** (Secure Email Gateway Suite). "
+        "VirusTotal and AbuseIPDB results are sourced from live threat intelligence APIs. "
+        "This report is advisory only — verify independently before taking enforcement action._",
+    ]
+
     return "\n".join(lines)
 
 

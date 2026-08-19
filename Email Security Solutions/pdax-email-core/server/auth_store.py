@@ -118,6 +118,39 @@ class AuthStore:
         finally:
             conn.close()
 
+    def set_password(self, user_id: int, new_password: str) -> None:
+        """Admin password reset — also used to rotate a user's credential."""
+        if len(new_password) < 8:
+            raise ValueError("password must be at least 8 characters")
+        salt = secrets.token_bytes(16)
+        password_hash = self._hash_password(new_password, salt)
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
+                (password_hash, salt.hex(), user_id),
+            )
+            if cur.rowcount == 0:
+                raise ValueError(f"user id {user_id} not found")
+            conn.commit()
+        finally:
+            conn.close()
+        # Force re-login after an admin reset.
+        self.delete_all_sessions_for_user(user_id)
+
+    def get_user_by_id(self, user_id: int) -> Optional[User]:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT id, username, role, disabled FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return User(id=row[0], username=row[1], role=row[2], disabled=bool(row[3]))
+        finally:
+            conn.close()
+
     def delete_user(self, user_id: int) -> None:
         conn = self._connect()
         try:

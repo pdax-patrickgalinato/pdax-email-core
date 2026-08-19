@@ -65,6 +65,8 @@ def _summarize_context(context: dict) -> str:
         h_bits.append("Return-Path domain mismatch")
     if headers.get("reply_to_divergent"):
         h_bits.append("Reply-To diverges from visible From")
+    if headers.get("reply_to_freemail"):
+        h_bits.append("Reply-To is consumer freemail")
     if headers.get("precedence_bulk") or headers.get("has_list_id"):
         h_bits.append("presents as bulk mail" +
                       ("" if headers.get("has_list_unsubscribe") else " (missing List-Unsubscribe)"))
@@ -95,6 +97,15 @@ def _summarize_context(context: dict) -> str:
         u_bits.append(f"{len(urls['anchor_mismatches'])} link(s) show one domain but go to another")
     if u_bits:
         lines.append("URLs: " + "; ".join(u_bits))
+
+    dec = context.get("deception") or {}
+    d_bits = []
+    if dec.get("matched_platform"):
+        d_bits.append(f"trusted platform match: {dec['matched_platform']}")
+    if dec.get("foreign_brands"):
+        d_bits.append("foreign brand lure(s): " + ", ".join(dec["foreign_brands"][:5]))
+    if d_bits:
+        lines.append("Deception structure: " + "; ".join(d_bits))
 
     atts = context.get("attachments") or {}
     a_bits = []
@@ -134,8 +145,19 @@ class HeuristicProvider:
                          r"within \d+ hours|action required|final notice|failure to)\b", re.I)
     CRED = re.compile(r"\b(password|login|sign ?in|verify your account|confirm your identity|"
                       r"update your (?:payment|billing))\b", re.I)
-    BEC = re.compile(r"\b(gift ?card|wire transfer|change (?:bank|payment) details|"
-                     r"urgent payment|are you available|quick task)\b", re.I)
+    BEC = re.compile(
+        r"\b(gift ?card|wire transfer|change (?:bank|payment) details|"
+        r"urgent payment|are you available|quick task|"
+        r"new bank(?:ing)? (?:account|details|instructions)|"
+        r"update (?:vendor|supplier|payment|billing) (?:details|information|method|account)|"
+        r"change (?:invoice|payment) (?:details|instructions|method|information)|"
+        r"overseas (?:wire|transfer|payment)|"
+        r"approve (?:this )?(?:wire|transfer|payment)|"
+        r"payment method update|"
+        r"settle (?:the |this )?(?:payment|invoice|amount)|"
+        r"pay (?:this |the )?(?:invoice|amount|balance))\b",
+        re.I,
+    )
     GENERIC = re.compile(r"\b(dear (?:customer|user|valued member|account holder))\b", re.I)
     # Financial-document lures are the most common phishing pretext after
     # credential resets — and they often carry no urgency wording at all.
@@ -150,6 +172,13 @@ class HeuristicProvider:
     # ask, diluting keyword and AI content scoring and defeating "below the
     # fold" truncation in some clients/scanners.
     PADDING = re.compile(r"(?:\n[ \t]*){12,}")
+    # Scarcity + reward bait (TestFlight AdsGPT-style). Weighted reinforcer only.
+    SCARCITY_REWARD = re.compile(
+        r"(?:limited\s+beta|only\s+\d[\d,]*\s+(?:participants|users|spots|testers)|"
+        r"up\s+to\s+\$\s*\d+|advertising\s+credits|free\s+(?:ad\s+)?credits|"
+        r"\$\d+\s+(?:in\s+)?(?:advertising\s+)?credits)",
+        re.I,
+    )
 
     def analyze(self, subject, body, context):
         text = f"{subject}\n{body}"
@@ -166,6 +195,8 @@ class HeuristicProvider:
             findings.append("payment_lure_subject"); score += 20
         if self.PADDING.search(body or ""):
             findings.append("content_padding_evasion"); score += 20
+        if self.SCARCITY_REWARD.search(text):
+            findings.append("lure_scarcity_reward"); score += 15
 
         # Thread-hijack tell: "Re:" implies an existing conversation, but a real
         # reply carries In-Reply-To/References. Attackers fake the prefix to
@@ -195,6 +226,7 @@ _KNOWN_FINDINGS = (
     "urgency_language", "credential_request", "bec_pattern", "generic_greeting",
     "payment_lure_subject", "fake_reply_prefix", "brand_impersonation",
     "unusual_request", "prompt_injection_attempt", "content_padding_evasion",
+    "lure_scarcity_reward",
 )
 
 _ORG = org_config.load_org_config()

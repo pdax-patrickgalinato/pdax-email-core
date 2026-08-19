@@ -1,0 +1,47 @@
+# High-value brands that must not appear as product/app titles in mail from
+# an unrelated trusted platform (see rules/trusted_platforms.yaml).
+# Used by the deception-structure stage: trusted channel + foreign brand lure.
+#
+# Keep tokens specific enough to avoid FPs ("meta" is word-bounded in code;
+# do not add ultra-generic words like "pay" or "bank" alone).
+# One brand / phrase per line. Lines starting with # are comments.
+
+openai
+open ai
+chatgpt
+openal
+meta
+binance
+coinbase
+kraken
+paypal
+microsoft
+google
+amazon
+apple pay
+facebook
+instagram
+whatsapp
+telegram
+tiktok
+netflix
+spotify
+adobe
+docusign
+sharefile
+dropbox
+onedrive
+sharepoint
+aws
+azure
+okta
+slack
+zoom
+linkedin
+robinhood
+crypto.com
+bybit
+okx
+metamask
+ledger
+trezor

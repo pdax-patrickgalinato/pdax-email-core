@@ -11,7 +11,7 @@ import yaml
 from ..models import PipelineResult, StageResult, StageStatus, Verdict
 from ..parsed_email import ParsedEmail
 from .. import disposition as disposition_mod
-from . import headers, sender, urls, attachments, content_ai, intel, verdict
+from . import headers, sender, urls, attachments, content_ai, intel, verdict, deception
 from . import correlation as correlation_mod
 
 _RULES_DIR = Path(__file__).resolve().parents[2] / "rules"
@@ -112,6 +112,7 @@ def run_pipeline(raw: bytes, source: str = "file",
     h = safe("headers", headers.run, pe)
     s = safe("sender", sender.run, pe, protected, vips)
     u = safe("urls", urls.run, pe, protected)
+    d = safe("deception", deception.run, pe, h.facts, u.facts)
     a = safe("attachments", attachments.run, pe, severity_points, banned_ext, policy_cfg)
     # Moved ahead of content_ai: intel doesn't depend on it, and the triage
     # decision below wants the full non-content picture (including any
@@ -127,6 +128,7 @@ def run_pipeline(raw: bytes, source: str = "file",
     # from this; see their _summarize_context().
     content_context = {"headers": h.facts, "sender": s.facts, "urls": u.facts,
                         "attachments": a.facts, "intel": i.facts,
+                        "deception": d.facts,
                         "raw_headers": {"in_reply_to": pe.header("In-Reply-To"),
                                         "references": pe.header("References")}}
 
@@ -136,7 +138,7 @@ def run_pipeline(raw: bytes, source: str = "file",
         # regex BEC bank covers bec_pattern for the VIP+BEC combo the same
         # way the paid providers' prompt does).
         c = safe("content_ai", content_ai.run, pe, content_ai.HeuristicProvider(), content_context)
-        result.stages = [h, s, u, a, c, i]
+        result.stages = [h, s, u, d, a, c, i]
         result.iocs = verdict.extract_iocs(pe, result.stages)
         verdict.score_and_verdict(result, weights, thresholds, policy_cfg)
 
@@ -149,25 +151,26 @@ def run_pipeline(raw: bytes, source: str = "file",
     else:
         c = safe("content_ai", content_ai.run, pe, requested_provider, content_context)
 
-    result.stages = [h, s, u, a, c, i]
+    result.stages = [h, s, u, d, a, c, i]
     result.iocs = verdict.extract_iocs(pe, result.stages)
     verdict.score_and_verdict(result, weights, thresholds, policy_cfg)
 
-    # Write path for local correlation (see correlation.py) — only after the
-    # verdict is final, and only SUSPICIOUS/MALICIOUS (record.record() itself
-    # also enforces this; checked here too to skip the call entirely on the
-    # common CLEAN/LOW case). Wrapped defensively so a storage hiccup can
-    # never affect the verdict already computed above.
-    if cs is not None and result.verdict.value in ("SUSPICIOUS", "MALICIOUS"):
+    # Behavioral correlation write-back (see correlation.py) — called for ALL
+    # emails so the behavioral baselines reflect the full mail flow, not only
+    # already-caught mail. Wrapped defensively so a storage hiccup can never
+    # affect the verdict already computed above.
+    if cs is not None:
         try:
-            cs.record(
-                verdict=result.verdict.value, message_id=result.message_id,
-                domains=result.iocs.domains, ips=result.iocs.ips,
-                urls=result.iocs.urls, hashes=result.iocs.hashes_sha256,
-                senders=result.iocs.sender_emails,
+            url_shorteners = (u.facts or {}).get("shortener_domains", [])
+            cs.record_observation(
+                sender=(pe.from_addr or "").lower(),
+                originating_ips=pe.originating_ips(),
+                shortener_domains=url_shorteners,
+                message_id=result.message_id,
+                verdict=result.verdict.value,
             )
         except Exception:
-            pass   # correlation history is an enhancement, never load-bearing
+            pass
 
     # Post-verdict only: map CLEAN/LOW/SUSPICIOUS/MALICIOUS → gateway action.
     # Does not change the verdict; AI never writes disposition.

@@ -277,6 +277,40 @@ extended suspicious_urls and attachment_risks item shapes).
         "action_items": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "sender_legitimacy": {
+      "type": "object",
+      "description": "MSOC-style sender/org assessment grounded on email text + RDAP only (no LinkedIn scrape)",
+      "properties": {
+        "claimed_organization": { "type": "string" },
+        "claimed_role": { "type": "string" },
+        "alignment_assessment": { "type": "string" },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "osint_limitations": { "type": "string" }
+      }
+    },
+    "landing_page_analysis": {
+      "type": "array",
+      "description": "Grounded on opt-in SEG_LANDING_FETCH results; empty if fetch off/degraded",
+      "items": {
+        "type": "object",
+        "properties": {
+          "final_url": { "type": "string" },
+          "title": { "type": "string" },
+          "forms_found": { "type": "array", "items": { "type": "string" } },
+          "context_mismatch": { "type": "boolean" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "investigation_findings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Numbered MSOC-style narrative findings"
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "threat_assessment": {
       "type": "object",
       "properties": {

@@ -1,0 +1,24 @@
+# Transactional platforms whose authentic mail is abused to push foreign-brand
+# lures (TestFlight, etc.). Auth looks clean on purpose — the tell is brand ≠
+# channel, not SPF failure. Tuned offline; extend rows as new abuse families appear.
+#
+# from_domains: registrable From domains that count as this platform
+# link_hosts: exact hosts that must appear in the message (service surface)
+# owned_brand_tokens: brands this platform may legitimately name (not lures)
+
+platforms:
+  - id: apple_testflight
+    from_domains:
+      - apple.com
+    link_hosts:
+      - testflight.apple.com
+    owned_brand_tokens:
+      - apple
+      - testflight
+      - app store
+      - itunes
+      - itunes connect
+      - ios
+      - macos
+      - tvos
+      - visionos

@@ -17,10 +17,12 @@ from fastapi.staticfiles import StaticFiles
 
 from app import org_config
 from app.pipeline import runner
-from . import feed_builder
+from app.pipeline import correlation as correlation_mod
+from . import deps, feed_builder
 from .routers import auth as auth_router
 from .routers import policy as policy_router
 from .routers import feed as feed_router
+from .routers import analyze as analyze_router
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DASHBOARD_DIR = _ROOT / "dashboard"
@@ -35,7 +37,9 @@ _config = None
 async def _lifespan(app: FastAPI):
     global _config
     _config = runner.load_config()
-    feed_builder.build_feed()   # runs the heuristic-only pipeline over samples/ once at boot
+    cs = correlation_mod.get_default_store()
+    deps.set_correlation_store(cs)
+    feed_builder.build_feed(correlation_store=cs)
     yield
 
 
@@ -68,6 +72,7 @@ def org():
 app.include_router(auth_router.router)
 app.include_router(policy_router.router)
 app.include_router(feed_router.router)
+app.include_router(analyze_router.router)
 
 
 # Static dashboard last — catches everything not matched by an API route

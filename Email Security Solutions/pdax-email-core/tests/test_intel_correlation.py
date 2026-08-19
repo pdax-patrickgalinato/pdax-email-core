@@ -1,164 +1,291 @@
-"""Unit tests for the local verdict-history correlation store
-(app/pipeline/correlation.py) and its wiring into intel.py::run() /
-runner.py::run_pipeline(). Every test uses an isolated temp-file SQLite DB —
-never the real project data/ directory.
+"""Tests for the behavioral correlation store (app/pipeline/correlation.py).
 
-Run: python3 -m pytest tests/test_intel_correlation.py
-     (or python3 tests/test_intel_correlation.py)
+Each test uses a temp-file-backed BehavioralCorrelationStore so nothing touches
+the production data/ directory.
 """
-import sys
+from __future__ import annotations
+
+import os
 import tempfile
-from pathlib import Path
+import time
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 
-from app.models import Verdict
-from app.parsed_email import ParsedEmail
-from app.pipeline import intel, runner
-from app.pipeline.correlation import CorrelationStore
-
-_FIXTURES = Path(__file__).resolve().parents[1] / "samples" / "fixtures"
+from app.pipeline.correlation import BehavioralCorrelationStore
+from app.pipeline import runner
 
 
-def _tmp_store() -> CorrelationStore:
-    tmp = Path(tempfile.mkstemp(suffix=".sqlite3")[1])
-    return CorrelationStore(db_path=tmp)
+def _make_store():
+    fd, path = tempfile.mkstemp(suffix=".sqlite3")
+    os.close(fd)
+    return BehavioralCorrelationStore(db_path=path), path
 
 
-# --- CorrelationStore directly ----------------------------------------------
+# ---------------------------------------------------------------------------
+# Rule 1a: same sender, different originating IPs → behavioral_sender_ip_drift
+# ---------------------------------------------------------------------------
 
-def test_lookup_empty_store_returns_no_flags():
-    store = _tmp_store()
-    assert store.lookup(domains=["evil.example"]) == []
-
-
-def test_record_then_lookup_finds_it():
-    store = _tmp_store()
-    store.record(verdict="MALICIOUS", message_id="<a@b>", domains=["evil.example"])
-    flags = store.lookup(domains=["evil.example"])
-    assert flags == ["correlation_seen_before:evil.example:1"]
-
-
-def test_record_increments_count_on_repeat():
-    store = _tmp_store()
-    store.record(verdict="MALICIOUS", message_id="<a@b>", domains=["evil.example"])
-    store.record(verdict="SUSPICIOUS", message_id="<c@d>", domains=["evil.example"])
-    flags = store.lookup(domains=["evil.example"])
-    assert flags == ["correlation_seen_before:evil.example:2"]
+def test_ip_drift_two_ips_triggers_flag():
+    store, path = _make_store()
+    try:
+        store.record_observation("alice@example.com", ["1.2.3.4"], [])
+        store.record_observation("alice@example.com", ["9.8.7.6"], [])
+        flags = store.behavioral_lookup("alice@example.com", ["9.8.7.6"], [])
+        drift_flags = [f for f in flags if f.startswith("behavioral_sender_ip_drift:")]
+        assert drift_flags, f"expected ip_drift flag, got: {flags}"
+        count = int(drift_flags[0].split(":")[-1])
+        assert count >= 2
+    finally:
+        os.unlink(path)
 
 
-def test_clean_verdict_never_recorded():
-    store = _tmp_store()
-    written = store.record(verdict="CLEAN", message_id="<a@b>", domains=["ok.example"])
-    assert written is False
-    assert store.lookup(domains=["ok.example"]) == []
+def test_no_flag_consistent_sender_ip():
+    store, path = _make_store()
+    try:
+        store.record_observation("bob@example.com", ["5.5.5.5"], [])
+        store.record_observation("bob@example.com", ["5.5.5.5"], [])
+        flags = store.behavioral_lookup("bob@example.com", ["5.5.5.5"], [])
+        drift = [f for f in flags if "sender_ip_drift" in f]
+        assert not drift, f"should not flag consistent sender/IP, got: {flags}"
+    finally:
+        os.unlink(path)
 
 
-def test_low_verdict_never_recorded():
-    store = _tmp_store()
-    written = store.record(verdict="LOW", message_id="<a@b>", domains=["ok.example"])
-    assert written is False
+# ---------------------------------------------------------------------------
+# Rule 1b: IP used by 5+ distinct senders → behavioral_ip_many_senders
+# ---------------------------------------------------------------------------
+
+def test_ip_many_senders_at_threshold():
+    store, path = _make_store()
+    try:
+        ip = "10.20.30.40"
+        for i in range(5):
+            store.record_observation(f"sender{i}@example.com", [ip], [])
+        flags = store.behavioral_lookup("new@example.com", [ip], [])
+        many = [f for f in flags if f.startswith("behavioral_ip_many_senders:")]
+        assert many, f"expected ip_many_senders flag at threshold 5, got: {flags}"
+        count = int(many[0].split(":")[-1])
+        assert count >= 5
+    finally:
+        os.unlink(path)
 
 
-def test_lookup_across_ioc_types():
-    store = _tmp_store()
-    store.record(verdict="MALICIOUS", ips=["1.2.3.4"], hashes=["deadbeef"], senders=["a@evil.example"])
-    assert store.lookup(ips=["1.2.3.4"]) == ["correlation_seen_before:1.2.3.4:1"]
-    assert store.lookup(hashes=["deadbeef"]) == ["correlation_seen_before:deadbeef:1"]
-    assert store.lookup(senders=["a@evil.example"]) == ["correlation_seen_before:a@evil.example:1"]
+def test_ip_many_senders_below_threshold():
+    store, path = _make_store()
+    try:
+        ip = "10.20.30.41"
+        for i in range(4):
+            store.record_observation(f"sender{i}@example.com", [ip], [])
+        flags = store.behavioral_lookup("new@example.com", [ip], [])
+        many = [f for f in flags if "ip_many_senders" in f]
+        assert not many, f"should not flag below threshold (4 senders), got: {flags}"
+    finally:
+        os.unlink(path)
 
 
-def test_lookup_and_record_degrade_on_storage_error_not_raise():
-    # An unwritable path (a directory that can't be created, e.g. under a
-    # nonexistent root with no permission) should degrade to a no-op rather
-    # than raising — same fail-soft contract as every other enrichment hook.
-    bogus = Path("/nonexistent-root-for-test/definitely/not/writable.sqlite3")
-    store = CorrelationStore(db_path=bogus)
-    assert store.lookup(domains=["x.example"]) == []
-    assert store.record(verdict="MALICIOUS", domains=["x.example"]) is False
+# ---------------------------------------------------------------------------
+# Rule 2: IP sends link shorteners → behavioral_ip_shortener
+# ---------------------------------------------------------------------------
+
+def test_ip_shortener_suspicious():
+    store, path = _make_store()
+    try:
+        ip = "11.22.33.44"
+        store.record_observation("spammer@evil.com", [ip], ["bit.ly"])
+        flags = store.behavioral_lookup("innocent@domain.com", [ip], [])
+        short_flags = [f for f in flags if f.startswith("behavioral_ip_shortener:")]
+        assert short_flags, f"expected ip_shortener flag, got: {flags}"
+        count = int(short_flags[0].split(":")[-1])
+        assert count >= 1
+    finally:
+        os.unlink(path)
 
 
-# --- intel.run() integration: weighted, not a hard override -----------------
+# ---------------------------------------------------------------------------
+# Rule 3: different senders share same shortener domain → behavioral_shared_shortener
+# ---------------------------------------------------------------------------
 
-def test_intel_run_correlation_hit_is_weighted_not_override():
-    store = _tmp_store()
-    store.record(verdict="MALICIOUS", domains=["repeat-offender.example"])
-    pe = ParsedEmail(_FIXTURES.joinpath("clean_normal.eml").read_bytes())
-    # Force the sender domain to match what we seeded, without needing a new
-    # fixture file — url_stage_facts/attach_facts empty is fine, run() only
-    # needs pe.from_domain for the domain candidate list here.
-    pe.msg.replace_header("From", "Someone <someone@repeat-offender.example>")
-    result = intel.run(pe, intel.LocalIOCClient(), {}, {}, correlation_store=store)
-    assert result.red_flags == ["correlation_seen_before:repeat-offender.example:1"]
-    assert 0 < result.sub_score < 90.0   # weighted, and strictly below a real intel-hit's 90
-
-
-def test_intel_run_no_correlation_store_is_noop():
-    pe = ParsedEmail(_FIXTURES.joinpath("clean_normal.eml").read_bytes())
-    result = intel.run(pe, intel.LocalIOCClient(), {}, {}, correlation_store=None)
-    assert result.red_flags == []
-    assert result.sub_score == 0.0
+def test_shared_shortener_malicious():
+    store, path = _make_store()
+    try:
+        store.record_observation("alice@evil.com", ["1.1.1.1"], ["tinyurl.com"])
+        flags = store.behavioral_lookup("bob@other.com", ["2.2.2.2"], ["tinyurl.com"])
+        shared = [f for f in flags if f.startswith("behavioral_shared_shortener:")]
+        assert shared, f"expected shared_shortener flag, got: {flags}"
+        count = int(shared[0].split(":")[-1])
+        assert count >= 1
+    finally:
+        os.unlink(path)
 
 
-def test_verdict_hard_override_requires_intel_prefix_not_correlation():
-    from app.models import PipelineResult, StageResult
-    from app.pipeline import verdict as verdict_mod
-    weights_cfg, *_ = runner.load_config()
-    result = PipelineResult(stages=[
-        StageResult(stage="intel", red_flags=["correlation_seen_before:x.example:3"], sub_score=75.0),
-    ])
-    verdict_mod.score_and_verdict(result, weights_cfg["weights"], weights_cfg["thresholds"])
-    assert result.hard_override is None   # correlation alone must never trigger threat_intel_hit
+def test_same_sender_no_shared_shortener_flag():
+    """Same sender using same shortener twice is NOT a cross-sender signal."""
+    store, path = _make_store()
+    try:
+        store.record_observation("alice@evil.com", ["1.1.1.1"], ["bit.ly"])
+        flags = store.behavioral_lookup("alice@evil.com", ["1.1.1.1"], ["bit.ly"])
+        shared = [f for f in flags if "shared_shortener" in f]
+        assert not shared, f"same sender should not self-trigger shared_shortener, got: {flags}"
+    finally:
+        os.unlink(path)
 
 
-# --- end-to-end through run_pipeline() --------------------------------------
+# ---------------------------------------------------------------------------
+# 6-month window
+# ---------------------------------------------------------------------------
 
-def test_e2e_write_path_persists_malicious_verdict_iocs():
-    store = _tmp_store()
-    weights_cfg, protected, vips, policy_cfg, banned_ext = runner.load_config()
-    raw = _FIXTURES.joinpath("phish_lookalike.eml").read_bytes()
-
-    result1 = runner.run_pipeline(
-        raw, source="test",
-        config=(weights_cfg, protected, vips, policy_cfg, banned_ext),
-        correlation_store=store,
-    )
-    assert result1.verdict == Verdict.MALICIOUS
-    # First pass: nothing recorded yet at lookup time (recording happens
-    # after the verdict is final), so no correlation flag on this run.
-    assert not any(f.startswith("correlation_seen_before") for f in result1.reasons)
-
-    # Second run of an email sharing the same lookalike domain IOC should now
-    # see it — proves the write path actually persisted after the first run.
-    result2 = runner.run_pipeline(
-        raw, source="test",
-        config=(weights_cfg, protected, vips, policy_cfg, banned_ext),
-        correlation_store=store,
-    )
-    intel_stage = result2.stage("intel")
-    assert any(f.startswith("correlation_seen_before:pdaxx.ph") for f in intel_stage.red_flags)
-
-
-def test_e2e_correlation_store_false_disables_write_path():
-    weights_cfg, protected, vips, policy_cfg, banned_ext = runner.load_config()
-    raw = _FIXTURES.joinpath("phish_lookalike.eml").read_bytes()
-    # correlation_store=False must not create/touch anything, and must not
-    # error even though the verdict is MALICIOUS (a recordable verdict).
-    result = runner.run_pipeline(
-        raw, source="test",
-        config=(weights_cfg, protected, vips, policy_cfg, banned_ext),
-        correlation_store=False,
-    )
-    assert result.verdict == Verdict.MALICIOUS
+def test_six_month_window_excludes_old_records():
+    """Records older than 180 days must not trigger any flags."""
+    store, path = _make_store()
+    try:
+        import sqlite3
+        old_ts = time.time() - (181 * 86400)
+        conn = sqlite3.connect(path)
+        # Create table with full schema (including verdict column).
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS sender_ip_log "
+            "(sender TEXT NOT NULL, ip TEXT NOT NULL, verdict TEXT DEFAULT '', "
+            "message_id TEXT, seen_at REAL NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO sender_ip_log (sender, ip, message_id, seen_at) VALUES (?,?,?,?)",
+            ("alice@example.com", "1.2.3.4", "", old_ts),
+        )
+        conn.commit()
+        conn.close()
+        # Add a second IP now — but the old record is stale, so distinct IPs in window = 1.
+        store.record_observation("alice@example.com", ["9.9.9.9"], [])
+        flags = store.behavioral_lookup("alice@example.com", ["9.9.9.9"], [])
+        drift = [f for f in flags if "sender_ip_drift" in f]
+        assert not drift, f"old record outside window should not count, got: {flags}"
+    finally:
+        os.unlink(path)
 
 
-if __name__ == "__main__":
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    passed = 0
-    for fn in fns:
-        try:
-            fn(); passed += 1; print(f"PASS {fn.__name__}")
-        except AssertionError as e:
-            print(f"FAIL {fn.__name__}: {e}")
-    print(f"\n{passed}/{len(fns)} passed")
-    sys.exit(0 if passed == len(fns) else 1)
+# ---------------------------------------------------------------------------
+# behavioral_details() returns rich data with flagged email records
+# ---------------------------------------------------------------------------
+
+def test_behavioral_details_returns_rich_structure():
+    store, path = _make_store()
+    try:
+        store.record_observation(
+            "alice@evil.com", ["1.1.1.1"], ["bit.ly"],
+            message_id="<msg1@test>", verdict="MALICIOUS"
+        )
+        store.record_observation(
+            "alice@evil.com", ["9.9.9.9"], [],
+            message_id="<msg2@test>", verdict="SUSPICIOUS"
+        )
+        details = store.behavioral_details("alice@evil.com", ["9.9.9.9"], [])
+        drift = [d for d in details if d["rule"] == "behavioral_sender_ip_drift"]
+        assert drift, "expected drift finding in details"
+        d = drift[0]
+        assert d["ioc_value"] == "alice@evil.com"
+        assert d["behavioral_count"] >= 2
+        assert d["flagged_count"] >= 1
+        assert any(e["verdict"] in ("MALICIOUS", "SUSPICIOUS") for e in d["emails"])
+    finally:
+        os.unlink(path)
+
+
+def test_behavioral_details_only_returns_flagged_emails():
+    """The 'emails' list in each finding must only contain SUSPICIOUS/MALICIOUS records."""
+    store, path = _make_store()
+    try:
+        store.record_observation("bob@evil.com", ["2.2.2.2"], [], verdict="CLEAN")
+        store.record_observation("bob@evil.com", ["3.3.3.3"], [], verdict="MALICIOUS")
+        details = store.behavioral_details("bob@evil.com", ["3.3.3.3"], [])
+        drift = [d for d in details if d["rule"] == "behavioral_sender_ip_drift"]
+        assert drift
+        emails = drift[0]["emails"]
+        verdicts = {e["verdict"] for e in emails}
+        assert verdicts <= {"SUSPICIOUS", "MALICIOUS"}, \
+            f"emails list should only contain flagged records, got verdicts: {verdicts}"
+    finally:
+        os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# Behavioral results are reference-only — no scoring or red_flags impact
+# ---------------------------------------------------------------------------
+
+def test_behavioral_flags_not_in_red_flags():
+    """Behavioral findings must NOT appear in intel stage red_flags (reference only)."""
+    store, path = _make_store()
+    try:
+        # Build a drift history.
+        store.record_observation("evil@example.com", ["1.2.3.4"], [])
+        store.record_observation("evil@example.com", ["5.6.7.8"], [], verdict="MALICIOUS")
+
+        eml = (
+            b"From: evil@example.com\r\n"
+            b"Received: from mail.example.com ([1.2.3.4]) by mx.example.com\r\n"
+            b"To: victim@company.com\r\n"
+            b"Subject: test\r\n"
+            b"Message-ID: <test2@example.com>\r\n"
+            b"\r\n"
+            b"Hello.\r\n"
+        )
+        result = runner.run_pipeline(eml, source="test", correlation_store=store)
+        intel_stage = next((s for s in result.stages if s.stage == "intel"), None)
+        assert intel_stage is not None
+        behavioral_red_flags = [
+            f for f in (intel_stage.red_flags or [])
+            if f.startswith("behavioral_")
+        ]
+        assert not behavioral_red_flags, \
+            f"behavioral flags must not appear in red_flags, got: {behavioral_red_flags}"
+    finally:
+        os.unlink(path)
+
+
+def test_behavioral_details_in_facts():
+    """Behavioral findings must appear in intel stage facts['behavioral_details']."""
+    store, path = _make_store()
+    try:
+        store.record_observation("evil@example.com", ["1.2.3.4"], [])
+        store.record_observation("evil@example.com", ["5.6.7.8"], [], verdict="SUSPICIOUS")
+
+        eml = (
+            b"From: evil@example.com\r\n"
+            b"Received: from mail.example.com ([1.2.3.4]) by mx.example.com\r\n"
+            b"To: victim@company.com\r\n"
+            b"Subject: test\r\n"
+            b"Message-ID: <test3@example.com>\r\n"
+            b"\r\n"
+            b"Hello.\r\n"
+        )
+        result = runner.run_pipeline(eml, source="test", correlation_store=store)
+        intel_stage = next((s for s in result.stages if s.stage == "intel"), None)
+        assert intel_stage is not None
+        details = (intel_stage.facts or {}).get("behavioral_details", [])
+        assert any(d["rule"] == "behavioral_sender_ip_drift" for d in details), \
+            f"expected sender_ip_drift in behavioral_details, got: {details}"
+    finally:
+        os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# correlation_store=False disables the feature
+# ---------------------------------------------------------------------------
+
+_MINIMAL_EML = (
+    b"From: alice@example.com\r\n"
+    b"To: bob@example.com\r\n"
+    b"Subject: test\r\n"
+    b"Message-ID: <test@example.com>\r\n"
+    b"\r\n"
+    b"Hello world.\r\n"
+)
+
+
+def test_disabled_store_noop():
+    """correlation_store=False must produce no behavioral flags and no errors."""
+    result = runner.run_pipeline(_MINIMAL_EML, source="test", correlation_store=False)
+    intel_stage = next((s for s in result.stages if s.stage == "intel"), None)
+    assert intel_stage is not None
+    behav = (intel_stage.facts or {}).get("behavioral_hits", [])
+    assert behav == [], f"disabled store should produce no behavioral flags, got: {behav}"
+    details = (intel_stage.facts or {}).get("behavioral_details", [])
+    assert details == [], f"disabled store should produce no behavioral details, got: {details}"

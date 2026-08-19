@@ -1,0 +1,521 @@
+Delivered-To: support@pdax.ph
+Received: by 2002:a05:7022:f690:b0:13f:a2de:a63 with SMTP id rs16csp538197dlb;
+        Sat, 8 Aug 2026 00:31:00 -0700 (PDT)
+X-Received: by 2002:a05:6000:982:b0:481:98d:b24 with SMTP id ffacd0b85a97d-481098d0e88mr10040141f8f.19.1786174260584;
+        Sat, 08 Aug 2026 00:31:00 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1786174260; cv=none;
+        d=google.com; s=arc-20260327;
+        b=QGwsIH5+LL6/jNLk1wwhzTYL/Ij2XsuXnvx1ekIEEotdecvSmXrymsZ+KMMI4kncfS
+         yGxxpMBAbgMDXnbfPbUsUuJxIfSTd7TQJ38hJA1hP+ThDuI+cVxQKl+p1qLAvn1DnyIu
+         hJFMhwu75P+VhTC9efnox/jDEYwhdEHdKtyPtMM1GsKyj4JZVRcGB1e+NklZiAFt2Kvj
+         BSVV/FrXxVm1tSkeFfsP2l+09cGJvykZs45kR/c5e/cCZgFniOlIwuhgxJ1hmhvA79nd
+         2A1w7PuhEZCPnuw5NB4MLE3PITZJizr//nh1dWLY0Bt9EsO7/5ymL+lC7u08TTGfrwzB
+         5GBQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=mime-version:subject:message-id:to:reply-to:from:date
+         :dkim-signature;
+        bh=C2VY5Rgp4VuNw8bihS7FvoLNFioF4qclrhvZmcddF7Q=;
+        fh=2si2BqxDBXxKDbhnD0+zit4eSx5WxFXrdLIdT4fTg/k=;
+        b=clVrqQ8eL9nHyHLlyoUu8dv6ofNqblhkAVlexBFUGC8169IhORCKaADLE95djYeUWJ
+         6U+AqjoVmgbH8v/soogL2JBTWg4SISj2L4lzDIhPts5GXoeGWeHSRcqmUk6ZsyyHqkXS
+         mCmqT5P5sQv9pLMeGLQuB2frzR/c3QLfGqsACRb2spE/AMZUXi045K4RpLBBz2+BBKTh
+         AesekpClh9RaolCqMWHaxyFfeLkTRUp4CNxGNwKF3rGBXOwe1hC8ivyMefUNuApckuNw
+         kNQX6wd4OFP5qE3dAAtIMewlex5Vg1TkzqQWThy7gycyEJEhb1T1i7LYx86UMos5x8KI
+         jZHA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=neutral (body hash did not verify) header.i=@email.apple.com header.s=email0517 header.b=l7uGoOeq;
+       spf=pass (google.com: domain of testflight_no_reply@email.apple.com designates 17.111.110.99 as permitted sender) smtp.mailfrom=testflight_no_reply@email.apple.com
+Return-Path: <testflight_no_reply@email.apple.com>
+Received: from inpost.tmes.trendmicro.com (inpost.tmes.trendmicro.com. [18.208.22.100])
+        by mx.google.com with ESMTPS id ffacd0b85a97d-48002234c63si6757242f8f.160.2026.08.08.00.31.00
+        for <support@pdax.ph>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Sat, 08 Aug 2026 00:31:00 -0700 (PDT)
+Received-SPF: pass (google.com: domain of testflight_no_reply@email.apple.com designates 17.111.110.99 as permitted sender) client-ip=17.111.110.99;
+Authentication-Results: mx.google.com;
+       dkim=neutral (body hash did not verify) header.i=@email.apple.com header.s=email0517 header.b=l7uGoOeq;
+       spf=pass (google.com: domain of testflight_no_reply@email.apple.com designates 17.111.110.99 as permitted sender) smtp.mailfrom=testflight_no_reply@email.apple.com
+Received: from 17.111.110.99_.trendmicro.com (unknown [192.168.188.40])
+	by inpost.tmes.trendmicro.com (Postfix) with SMTP id 624D0C00043E
+	for <support@pdax.ph>; Sat, 08 Aug 2026 07:30:59 +0000 (UTC)
+X-TM-MAIL-RECEIVED-TIME: 1786174258.069000
+X-TM-MAIL-UUID: ce35aaff-e41c-44eb-ad2c-7469feca3afe
+Received: from rn2-txn-msbadger06104.apple.com (unknown [17.111.110.99])
+	by inpre01.tmes.trendmicro.com (Trend Micro Email Security) with ESMTPS id 10FCBC00A3F8
+	for <support@pdax.ph>; Sat, 08 Aug 2026 07:30:57 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=email.apple.com;
+	s=email0517; t=1786174257;
+	bh=LrjWk6UN8mNy4JVhQ0d131lH6X6U/IKxuDYHp5O8b2s=;
+	h=Date:From:To:Message-ID:Subject:Content-Type;
+	b=l7uGoOeqhHaCYPacAf6HxnVL5EHk3Hmuuhg1HYo8ffl18ZQNx58r99Dt9DKwJMOb5
+	 OnjBjWpi0N31ccvlwfuN0QZicmOVMcun9sOv2ETJ/rJ6CbR2Edhxthhx8bNz+ziOBF
+	 cwc4Y6oiNT5JoytWo8REYeHpghC8osVjfsqbVNWX6xm1AeQyc0caxHEMVTucZT+gHq
+	 DXuhR4HGyp2wIZLTLqXFJIM6502T4TbNtFqu7qu8yRTrG94Xd9U8hyaKey+ixg0eg/
+	 lPu7jtAg9FdbI9b28jIFugpKWH4kmArYQCPQVpF4KqoiMFtOPOEFJCD8r/p7rql6aA
+	 xStBjWzSc3NMg==
+Date: Sat, 8 Aug 2026 07:30:57 +0000 (GMT)
+From: THANH TRUNG PHAN via TestFlight <testflight_no_reply@email.apple.com>
+Reply-To: phantrung82957@icloud.com
+To: support@pdax.ph
+Message-ID: <731019075.27244948.1786174257333@email.apple.com>
+Subject: THANH TRUNG PHAN has invited you to test OpenAI AdsGPT Ad Insights.
+MIME-Version: 1.0
+Content-Type: multipart/alternative; 
+	boundary="----=_Part_27244946_1895465494.1786174257332"
+X-Broadcast-Id: 10631
+X-Attach-Flag: N
+X-COMMS-C: false
+X-Sent-To: support@pdax.ph,2,qhXK41x%2F4bPIxy1NqT8K5vvnoYa5KQruYZ8jzGAVc%2BlkyXJUnAIbeIpFUZKopOOYnLpsWUqbQ4%2BK9IixjwUR8gEQpTRXBznH73VSbqr02TTTZwiUKIK9pg8s2vEAoXz9jvQvnEMIRb8m1P3uKwHYTocIdcmiykLnwinCts2%2FYqrdk6aShyfVtK0KtMDgjF4OgGJYvCDrClxrrEAQCZtrKeh4tFKaKGxwYXEc6m4ShBZkLU6uhqcIFkW9JRK%2F3bXXZ8%2FSFeewR%2Fkm8iScUWj9cH5sGmn7Cvy4jq4DXyHMFLOfCqaW5blPksJ6vqiRuCIAFHw%2FrfWYBMz7oD9pNS%2FaIs1n74F%2B3fUfgcW8jv6oAlID1wCwzn13X3SLfh4t5Zqyk9YlxwwlsFmhyHD8EGIdvcZxuZcyxJodCKMQYrrMCfUYyAMEJZnfF7z9tpz%2BPnS%2B
+X-TXN_ID: 5cb0fafc-fccb-42da-8c01-7a6f8bff43f7
+X-DKIM_SIGN_REQUIRED: YES
+X-EmailType-Id: 10631
+X-Business-Group: iTunes
+X-Country: US
+X-TM-Received-SPF: Pass (domain of testflight_no_reply@email.apple.com 
+	designates 17.111.110.99 as permitted sender) client-ip=17.111.110.99; 
+	envelope-from=testflight_no_reply@email.apple.com; 
+	helo=rn2-txn-msbadger06104.apple.com
+X-TM-Authentication-Results: spf=pass (sender IP address: 17.111.110.99) 
+	smtp.mailfrom=email.apple.com; dkim=pass (signatures verified) 
+	header.d=email.apple.com; dmarc=pass action=reject 
+	header.from=email.apple.com; arc=none
+X-TM-AS-ERS: 17.111.110.99-127.9.0.1
+X-TMASE-Version: StarCloud-1.3-9.2.1014-30120.005
+X-TMASE-Result: 10--29.287600-10.000000
+X-TMASE-MatchedRID: KxrMY5blxgLXINOfzoKHeGfiSnQhe2OUdm71ac9P1TlgmXNfLQV6tBap
+	7mUC2FdJ7ez/zClnvA/wAvnh487C5te6PFd3NjH8MlYHirgfM3KL5mNYRNlQ1D+z0S2PWR7Itpe
+	0gu4lkX+tp0sWDF41DmQmw7LgNy9QvL/UZmS0zPn6fuVSs4vioU69uA5BeruA+eFcvJPH+5P1n4
+	dnOS3ZGZCGfLFfQMPQLqOPibfKQ094lyF1lyvUrQVGwx2b8My20GII7OUKNQCtxM8p1JJ5uNvoF
+	Jx23S6Yq3r41hxLCf5+N4NYc/mWryXiZrzoX6JrJSrQ0lpJdn2IcOmd382XO58k3wfgyo9h/AFj
+	0fBJksiuUHn1uz9LFxw0t3Wk0JV+bwpCcqvkiRp56HeBiPLk9Cv2yp3jQkTpWIQgUpqaN2QPgpF
+	s11GSm1002gJ/tvFheUsQrjktZdOuQrmGrkWBDVsAWUv11dnkp4eJRzBBofnuwJlbVg03eH0pcv
+	AcZ81hZ+qG1EN/dHwfClk9tcUWcxTRT6kU85pko4iCakRRMU05eAtZp3xzacR7cfarf9a/wTrjX
+	7Scr1/cycpZz1GgPI5X3FAY7Qln1VtmMoWKdRDriyrp6RgprTdE04BCZMU9ch2t0VdHjxYTAwPn
+	SiYMJ3ZmW3Vl41gS9e2eHfr3IZAhPK2mn+OsTNVRbHgTqRNX3LI4y9d3u4+RKN/v3F8uYrTswdT
+	Ot24IspDieqTqMqb74diwVvyjRbv8GRKsaHWWT6RGO66pckA7c58D5vT2Wk2cZDgS3r8kIM+Uki
+	Y0IQCXry3/kxeLv9MFx9aA2cYIXPrzAAnXmtq5R4kK4H1ovVIzPHeqXZhDzJ/FCco/WS3CI5lHY
+	xCgl2SwITFYZL8z0GaQ+S3gPCfnEkgy0T9643wuCMDi78rnN9OsH0LckBCMvKMdOvSlcTRJtdGQ
+	a/rJL2Hq16NTtQOvKgyPsg0bIYk5Q17Sm/9sR0VUHoNRG1dX9HM7P8GE6Q==
+X-TMASE-SNAP-Result: 1.821001.0001-0-1-22:0,28:1,30:1,33:0,34:0-0
+X-TMASE-XGENCLOUD: 650bf012-a88c-4c81-aeff-77472bd526dd-0-0-200-0
+X-TM-RISKAI-PTN-VERSION: 1.24.0+20260808.ee5aaec
+X-TM-RISKAI-MATCHEDFID: WyJGSUwwNDAiLCAiRklMMDQxIiwgIkZJTDA0MiIsICJGSUwwNDMi
+	LCAiRklMMDQ0IiwgIkZJTDA3OCIsICJGSUwwODAiLCAiRklMMDgxTiIsICJGSUwwODUiLCAiRkl
+	MMDg3IiwgIkZJTDA5NyIsICJGSUwwOTgiLCAiRklMMTIxIiwgIkZJTDEzNyIsICJGSUwxNTAiLC
+	AiRklMMTYxIiwgIkZJTDE5NyIsICJGSUwxOTgiLCAiRklMMTk5IiwgIkZJTDIwMCIsICJGSUwyM
+	jkiLCAiRklMMjMyIl0=
+X-TM-Deliver-Signature: 614578ED712701942B08F8F5EE7ED911
+X-TM-Addin-Auth: r98qgx2AL8Hc1o2DvRk0D5IPBjmlSQa8Pdm2wDW8KaAA/em99QutaAgxLvq
+	0g9MPSDX+6xR1IVclasx9Xsnyw1M3wlLCaZ8G+rD8cEh+yKRzBnUX/XanKFEgxaorS0hg0ZlM+G
+	yTK0YQA483brRUr8k2btN8XU67ZUEVrpT4X4q2sX50H+npbMr13SfXxgee/ewavC3DHY7PbMv+6
+	ItihU7oQVM8i+zSgOQv9oyZQ/CinDnRlAFe6VeyBVn8gJH5oz7sjFQrlTLsSJoy+u3TrR5X6DMn
+	S8OYjZlJjg0CZyY=.wPy3y+g8j3y+iRUP2EQslJ+qSsQCrCvOKy6OuaCAku6mdLJWkhtWtZouc4
+	w2Z7Vk+EsrG90AovsyPlMA37qHhHXSBlf6Jk7FRlpBgfH5cVd0Yvmi8RSGNXnT0PF5aCsSpXL+P
+	Ao4KYRx5FCN/7WHz0OxLuJbOZfGf2LjL5SD773lEm26/Yi3Fj9D0StCZiDqlUTaUyKummSxJyWK
+	55+b3jwIJXMjDGZJA0PcaT1KiEYY62NkzFemQvZgTI6/cEEfQXBMYUQ49A/b3VfOICjap3UDuSy
+	v5jmzaL+Zt2GQ84pprn7db/o79BtOi/Ke+XEevjWMSJaw3akII6emUGJN4g==
+X-TM-Addin-ProductCode: EMS
+
+------=_Part_27244946_1895465494.1786174257332
+Content-Type: text/html;
+	charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
+
+<table width=3D100%><tr><td bgcolor=3D#ffffff><font color=3D#000000><pre>=
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"left" wi=
+dth=3D"100%" style=3D"width:100.0%;table-layout:fixed;"><tbody><tr><td st=
+yle=3D"width:1.0%;background:#ff9838;padding:5.25pt 1.5pt 5.25pt 1.5pt"><=
+/td><td width=3D"100%" style=3D"width:100.0%;background:#ffdcbb;padding:5=
+.25pt 3.75pt 5pt 11.25pt; word-wrap:break-word" cellpadding=3D"7px 5px 7p=
+x 15px" color=3D"#212121"><p style=3D"text-align: left;"><strong><span st=
+yle=3D"color: #e03e2d;">EXTERNAL:</span></strong> Please be cautious in o=
+pening the contents of this email.</p></td></tr></tbody></table></pre></f=
+ont></td></tr></table>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>iTunes Connect</title>
+  <meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Diso-8=
+859-1">
+  <style type=3D"text/css">
+    A { text-decoration: none; }
+    A:link { color: #0088CC; text-decoration: none; }
+    A:visited { text-decoration: none; }
+    A:active { color: #696969; text-decoration: underline;}
+    A:hover { text-decoration: underline; }
+    BODY, TD, P, UL, OL,h1,h2,h3 {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 18px;
+    color: #666666;
+    text-align: justify;
+    font-weight: 300;
+    }
+    body {
+        margin: 0;
+        padding: 0;
+    }
+    P {
+    margin-bottom: 1em;
+    }
+    H1 {
+    line-height:145%;
+    }
+    HR {
+    border: 0;
+    border-top: 1px solid #dddddd;
+    margin: 10px 0px 15px 0px;
+    }
+    @media only screen and (max-device-width: 481px) and (min-device-pixe=
+l-ratio : 2), only screen and (min-device-width: 481px) and (-webkit-min-=
+device-pixel-ratio : 2) {
+    *[id=3Dheader] { background:url('https://itunesconnect.apple.com/itc/=
+images/email/email-itc-logo@2X.png') no-repeat 0 top; -webkit-background-=
+size: 173px 45px; }
+    *[id=3Dhr-fade] { background:url('https://itunesconnect.apple.com/itc=
+/images/email/email-hr@2X.png') no-repeat 0 top; -webkit-background-size:=
+ 648px 18px; }
+    }
+    @media only screen and (max-width: 580px) {
+        table[class=3D"table"], td[class=3D"cell"] {
+            width: 100% !important;
+        }
+        img[id=3D"header"] {
+            width: 135px !important;
+            height: 35px !important;
+        }
+        td[id=3D"header"] {
+            -webkit-background-size: 135px 35px;
+        }
+        table[class=3D"footer_table"] td[class=3D"backgroundcell"] {
+            width:100% !important;
+            background-size: 100% auto;
+        }
+        table[class=3D"footer_table"] {
+            width:100% !important;
+        }
+
+        body {
+            margin: 0 15px
+        }
+    }
+  </style>
+</head>
+<body style=3D"background-color: #ffffff" bgcolor=3D"#ffffff">
+    <table class=3D"table" border=3D"0" cellspacing=3D"0" cellpadding=3D"=
+0" align=3D"center" width=3D"580">
+        <tr align=3D"center">
+            <td align=3D"center">
+                        
+
+                                
+
+    <table cellspacing=3D"0" cellpadding=3D"0" style=3D"margin: auto;" bo=
+rder=3D"0" width=3D"580" class=3D"table">
+
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"40px"/></td></tr>
+        
+        <tr>
+            <td class=3D"cell" align=3D"center" style=3D"text-align: cent=
+er">
+                
+
+                
+                    
+
+                    
+                        
+                            
+                            
+                                
+                                
+                                    <img src=3D'https://is1-ssl.mzstatic.=
+com/image/thumb/Purple221/v4/83/59/c4/8359c476-dc79-590d-812c-5d7c27420d2=
+1/AppIcon-0-0-1x_U007emarketing-0-11-0-85-220.png/304x304bb-80.png' align=
+=3D"center" style=3D"-webkit-border-radius: 25%;-moz-border-radius:25%;bo=
+rder-radius: 25%; max-width: 152px; border: 1px solid #ebebeb;" alt=3D'Op=
+enAI AdsGPT Ad Insights, app icon' />
+                                
+                            
+                        
+
+                        
+                    
+
+                
+            </td>
+        </tr>
+        
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"20px"/></td></tr>
+        
+        <tr>
+            <td class=3D"cell" align=3D"center" style=3D"text-align: cent=
+er">
+                <h1 style=3D"font-size:24px;line-height:26px;margin-botto=
+m:0;margin-top:0;padding:0;text-align:center;color:#030303;-webkit-text-s=
+ize-adjust:none;font-family: -apple-system, BlinkMacSystemFont, sans-seri=
+f; font-weight: 300;" aria-label=3D'OpenAI AdsGPT Ad Insights for iOS'>
+                    <span>OpenAI AdsGPT Ad Insights</span>
+                    <div>By THANH TRUNG PHAN for iOS.</div>
+                </h1>
+            </td>
+        </tr>
+
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"30px"/></td></tr>
+
+  
+        <tr>
+            <td class=3D"cell" align=3D"center" style=3D"text-align: cent=
+er">
+                
+                <a href=3D'https://testflight.apple.com/v1/invite/e0043d7=
+981244c11bea4a7860bc1af4b69602de5917e40eab427f66ef86acb46195436784?ct=3D7=
+CG7643ZP4&advp=3D10000&platform=3Dios' alt=3D"Start Testing" aria-label=
+=3D"Start Testing" style=3D"background-color:#3a81fd;border:1px solid #DD=
+DEE0;border-radius:8px;color:#ffffff;display:inline-block;font-family: -a=
+pple-system, BlinkMacSystemFont, sans-serif; font-weight: 400; font-size:=
+14.1px;line-height:47px;text-align:center;text-decoration:none;width:267p=
+x;-webkit-text-size-adjust:none;">
+                    View in TestFlight
+                </a>
+            </td>
+        </tr>
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"30px"/></td></tr>
+
+
+
+        
+       
+    
+        
+                    
+            
+            <tr><td class=3D"cell" align=3D"left">
+               <h2 style=3D"font-size:17px;margin:0;padding:0;text-align:=
+left;color:#000000;-webkit-text-size-adjust:none;font-family: -apple-syst=
+em, BlinkMacSystemFont, sans-serif; font-weight: 500;">
+                    App Description
+                </h2>
+           </td></tr>
+
+            <tr><td class=3D"cell"><img src=3D"https://itunesconnect.appl=
+e.com/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" heig=
+ht=3D"5px"/></td></tr>
+
+            <tr>
+                <td class=3D"cell" align=3D"left">
+                    <pre style=3D"font-size:17px;margin:0;padding:0;text-=
+align:left;color:#4A4A4A;-webkit-text-size-adjust:none;font-family: -appl=
+e-system, BlinkMacSystemFont, sans-serif; font-weight: 300; line-height: =
+1.4em; white-space: -moz-pre-wrap;white-space: -pre-wrap; white-space: -o=
+-pre-wrap; white-space: pre-wrap; word-wrap: break-word;">Introducing Ads=
+GPT =E2=80=94 Your GPT-5.6 AI Advertising Analyst
+
+Your beta access is ready.
+
+AdsGPT provides advertisers with clear campaign analysis, performance com=
+parisons, and optimization recommendations.
+
+The app helps reveal which campaigns are working, where advertising spend=
+ may be inefficient, and what actions could improve overall campaign perf=
+ormance.
+
+Ask direct questions and receive structured answers based on your adverti=
+sing metrics.
+
+AdsGPT allows you to:
+
+=E2=80=A2 Analyze CTR, CPC, CPM, CPA, ROAS, and spend
+=E2=80=A2 Review clicks, impressions, leads, and conversions
+=E2=80=A2 Detect weak campaigns and wasted budget
+=E2=80=A2 Compare ad creatives and target audiences
+=E2=80=A2 Evaluate multiple campaigns and ad accounts
+=E2=80=A2 Understand campaign performance signals
+=E2=80=A2 Find possible scaling and testing opportunities
+=E2=80=A2 Generate a prioritized advertising action plan
+
+Limited Beta =E2=80=94 1,000 Accepted Users
+
+Only 1,000 participants will be accepted during this beta launch.
+
+Selected users may receive up to $200 in advertising credits.
+
+Open AdsGPT and activate your invitation.</pre>
+                    <div style=3D"height:1px; width: 100%; background:#DC=
+DEE0;margin:20px auto"></div>
+                </td>
+            </tr>
+           
+        
+                        
+
+
+
+        
+        <tr>
+            <td class=3D"cell" align=3D"left">
+                <p style=3D"font-size:17px;margin:0;padding:0;text-align:=
+left;color:#4A4A4A;-webkit-text-size-adjust:none;font-family: -apple-syst=
+em, BlinkMacSystemFont, sans-serif; font-weight: 300; line-height: 1.4em"=
+>You've been invited by THANH TRUNG PHAN to be a tester for their app, Op=
+enAI AdsGPT Ad Insights. If you no longer want to receive TestFlight invi=
+tations from THANH TRUNG PHAN, <a href=3D'mailto:phantrung82957@icloud.co=
+m?subject=3DRequest%20to%20be%20removed%20from%20TestFlight%20testers%20l=
+ist&body=3Dsupport@pdax.ph%20wants%20to%20stop%20receiving%20TestFlight%2=
+0emails%20about%20OpenAI AdsGPT Ad Insights' style=3D"text-decoration:non=
+e">contact the developer</a> to request removal from their tester list.</=
+p>
+            </td>
+        </tr>
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"15px"/></td></tr>
+
+        
+        <tr>
+            <td class=3D"cell" align=3D"left">
+                <p style=3D"font-size:17px;margin:0;padding:0;text-align:=
+left;color:#4A4A4A;-webkit-text-size-adjust:none;font-family: -apple-syst=
+em, BlinkMacSystemFont, sans-serif; font-weight: 300; line-height: 1.4em"=
+>When you test a beta app, Apple and the app developer will receive crash=
+ logs, usage information, and any feedback you submit. The developer may =
+use this information to improve their app and related products. Apple may=
+ use crash logs and usage information to improve our products and service=
+s.</p>
+            </td>
+        </tr>
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"15px"/></td></tr>
+
+        
+        <tr>
+            <td class=3D"cell" align=3D"left">
+                <p style=3D"font-size:17px;margin:0;padding:0;text-align:=
+left;color:#4A4A4A;-webkit-text-size-adjust:none;font-family: -apple-syst=
+em, BlinkMacSystemFont, sans-serif; font-weight: 300; line-height: 1.4em"=
+>To learn more about installation, testing, submitting feedback, supporte=
+d OS versions, and the handling of your data, visit <a href=3D"https://te=
+stflight.apple.com" style=3D"text-decoration:none">testflight.apple.com</=
+a>.</p>
+            </td>
+        </tr>
+
+
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"15px"/></td></tr>
+        <tr>
+            <td class=3D"cell" align=3D"left">
+                <p style=3D"font-size:17px;margin:0;padding:0;text-align:=
+left;color:#4A4A4A;-webkit-text-size-adjust:none;font-family: -apple-syst=
+em, BlinkMacSystemFont, sans-serif; font-weight: 300; line-height: 1.4em"=
+>To test this app, you must have <a href=3D'https://testflight.apple.com/=
+a' style=3D"text-decoration:none">TestFlight</a> installed on your iOS de=
+vice running 14.0 or later, Mac using macOS 12.0 or later, Apple TV using=
+ tvOS 14.0 or later, or Apple Vision Pro using visionOS 1.0 or later.</p>
+            </td>
+        </tr>
+        
+
+        
+
+        <tr><td class=3D"cell" style=3D"border-bottom:1px solid #e9e9e9">=
+<img src=3D"https://itunesconnect.apple.com/itc/images/email/spacer.gif" =
+border=3D"0" alt=3D"" width=3D"1" height=3D"40px"/></td></tr>
+        <tr><td class=3D"cell"><img src=3D"https://itunesconnect.apple.co=
+m/itc/images/email/spacer.gif" border=3D"0" alt=3D"" width=3D"1" height=
+=3D"20px"/></td></tr>
+        <tr>
+            <td class=3D"cell" align=3D"left">
+                <p style=3D"font-size: 10px;line-height:16px;text-align:l=
+eft;color:#888;-webkit-text-size-adjust:none;font-family: -apple-system, =
+BlinkMacSystemFont, sans-serif; font-weight: 400;">By using OpenAI AdsGPT=
+ Ad Insights, you agree that crash data as well as statistics about how y=
+ou use OpenAI AdsGPT Ad Insights will be provided to THANH TRUNG PHAN and=
+ linked to your email address. THANH TRUNG PHAN may contact you regarding=
+ this information. Review the TestFlight Terms and Conditions, as well as=
+ the terms, policies, and practices of THANH TRUNG PHAN. Beta versions of=
+ apps may crash or result in data loss.</p>
+            </td>
+        </tr>
+    </table>
+
+
+                        
+
+            </td>
+        </tr>
+    </table>
+    <table class=3D"footer_table" width=3D"580" border=3D"0" cellspacing=
+=3D"0" cellpadding=3D"0" align=3D"center" style=3D"margin-bottom:40px;">
+        <tr>
+            <td class=3D"backgroundcell" style=3D"margin:0px auto;" align=
+=3D"center" width=3D"580">
+                <table cellspacing=3D"0" cellpadding=3D"0" style=3D"margi=
+n: auto;" border=3D"0" width=3D"100%">
+                    <tr>
+                        <td align=3D"center">
+                            <p style=3D"font-size:10px;line-height:16px;c=
+olor:#888;-webkit-text-size-adjust:none;margin:0;padding:0;font-family:-a=
+pple-system, BlinkMacSystemFont, sans-serif;">
+                                TestFlight is a service provided by Apple=
+.<br/>
+                                <span style=3D"white-space:nowrap;">
+                                    <a style=3D"text-decoration:none;" ta=
+rget=3D"_blank" href=3D"https://www.apple.com/legal/internet-services/itu=
+nes/">Terms of Service</a> 
+                                    | 
+                                    <a style=3D"text-decoration:none;" ta=
+rget=3D"_blank" href=3D"https://www.apple.com/legal/privacy/">Privacy Pol=
+icy</a>
+                                    
+                                        |
+                                        <a style=3D"text-decoration:none;=
+" target=3D"_blank" href=3D'https://reportaproblem.apple.com/store/679918=
+9892?s=3D23&buildId=3D824f912e-925c-4bd3-8fd9-3276185824b7&testerId=3De00=
+43d79-8124-4c11-bea4-a7860bc1af4b'>
+                                            Report A Problem
+                                        </a>
+                                    
+                                </span>
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td height=3D"8" style=3D"font-size:8px;line-heig=
+ht:8px;">=C2=A0</td>
+                    </tr>
+                    <tr>
+                        <td align=3D"center">
+                            <p style=3D"font-size:10px;line-height:16px;c=
+olor:#888;-webkit-text-size-adjust:none;margin:0;padding:0;font-family:-a=
+pple-system, BlinkMacSystemFont, sans-serif;">
+                                Copyright =C2=A9 2026 Apple Inc. <span st=
+yle=3D"white-space:nowrap;">One Apple Park=E2=80=8B=C2=A0Way</span><br/>
+                                
+                                Cupertino,=E2=80=8B=C2=A0CA=E2=80=8B=C2=
+=A095014,=E2=80=8B=C2=A0United=E2=80=8B=C2=A0States.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+
+------=_Part_27244946_1895465494.1786174257332--
+

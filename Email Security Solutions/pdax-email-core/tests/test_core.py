@@ -46,6 +46,18 @@ def test_bec_is_flagged():
     assert _verdict("bec_giftcard.eml") in ("SUSPICIOUS", "MALICIOUS")
 
 
+def test_testflight_brand_lure_is_malicious():
+    """Apple TestFlight service abuse (OpenAI/Meta lure) — hard override."""
+    raw = (Path(__file__).resolve().parents[1] / "samples" / "testflight_no_reply.eml").read_bytes()
+    result = run_pipeline(raw, source="test")
+    assert result.verdict.value == "MALICIOUS"
+    assert result.hard_override == "service_abuse_testflight_brand_lure"
+    assert "service_abuse_testflight_brand_lure" in result.reasons
+    dec = next(s for s in result.stages if s.stage == "deception")
+    assert "service_abuse_testflight_brand_lure" in dec.red_flags
+    assert "deception_structure_service_abuse" in dec.red_flags
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0

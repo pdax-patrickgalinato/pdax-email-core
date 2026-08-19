@@ -1,0 +1,21 @@
+# Consumer freemail domains — used for From freemail_corporate_persona and
+# Reply-To reply_to_freemail / trusted-channel handoff. One domain per line.
+
+gmail.com
+yahoo.com
+outlook.com
+hotmail.com
+proton.me
+protonmail.com
+aol.com
+icloud.com
+yandex.com
+mail.com
+live.com
+msn.com
+me.com
+mac.com
+gmx.com
+zoho.com
+ymail.com
+googlemail.com

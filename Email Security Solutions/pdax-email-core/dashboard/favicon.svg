@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background -->
+  <rect width="100" height="100" rx="20" fill="#2A4A7A"/>
+  <!-- Padlock shackle / arch -->
+  <path d="M30 46Q30 14 50 14Q70 14 70 46"
+        stroke="white" stroke-width="9" stroke-linecap="round" fill="none"/>
+  <!-- Shield / padlock body -->
+  <path d="M16 46H84V67C84 82 50 93 50 93C50 93 16 82 16 67Z" fill="white"/>
+  <!-- Envelope (navy cutout inside shield) -->
+  <rect x="27" y="52" width="46" height="33" rx="4" fill="#2A4A7A"/>
+  <!-- Envelope flap V-line -->
+  <path d="M27 52L50 70L73 52" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" fill="none"/>
+  <!-- Mini padlock body on envelope -->
+  <rect x="38" y="65" width="24" height="17" rx="3.5" fill="white"/>
+  <!-- Mini padlock shackle -->
+  <path d="M41 65V60C41 53.5 59 53.5 59 60V65"
+        stroke="white" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+</svg>

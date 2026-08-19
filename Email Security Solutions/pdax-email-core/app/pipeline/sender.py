@@ -18,6 +18,7 @@ from ..models import StageResult, StageStatus
 from ..parsed_email import ParsedEmail
 from ..domainutils import registrable_domain, normalize_confusables, levenshtein
 from ..rdap_client import domain_age_days as _rdap_domain_age_days
+from ..lists import freemail_domains
 
 # Below this many days since RDAP registration, a domain counts as "newly
 # registered" — an established phishing-infrastructure signal on its own,
@@ -25,16 +26,11 @@ from ..rdap_client import domain_age_days as _rdap_domain_age_days
 # this stays a small weighted addition, never a hard override.
 _DOMAIN_AGE_LOW_DAYS = 30
 
-FREEMAIL = {
-    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "proton.me",
-    "protonmail.com", "aol.com", "icloud.com", "yandex.com", "mail.com",
-}
-
 # Third-party SaaS/e-signature/file-share brands commonly named in a
 # "'<name>' Via <Brand> Notifications" display-name shape — a doc/e-sign
 # lure borrows the BRAND's trust, not an individual's, so it needs its own
 # check distinct from VIP-name spoof below. List is deliberately small;
-# extend as new abused brands turn up (same posture as FREEMAIL above —
+# extend as new abused brands turn up (same posture as freemail_domains —
 # promote to a rules/*.txt file if this needs frequent, code-free tuning).
 BRAND_DOMAINS = {
     "sharefile": {"sharefile.com", "citrix.com", "citrite.net"},
@@ -112,7 +108,7 @@ def run(pe: ParsedEmail, protected_domains: list[str], vip_names: list[str],
             flags.append("display_name_is_email"); score += 15
 
     # Corporate-claiming display name from a freemail domain
-    if from_dom in FREEMAIL and any(
+    if from_dom in freemail_domains() and any(
         kw in display for kw in ("support", "admin", "security", "it ", "helpdesk", "finance")
     ):
         flags.append("freemail_corporate_persona")

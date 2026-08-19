@@ -8,6 +8,7 @@ window.SEG_FLAG_DESCRIPTIONS = {
     "dmarc_fail": "DMARC failed — this domain's own policy says messages like this shouldn't be trusted.",
     "return_path_mismatch": "The bounce address (Return-Path) doesn't match the visible From domain — common in spoofed mail.",
     "reply_to_divergent": "Replies would go to a different domain than the visible sender — a classic reply-hijack tell.",
+    "reply_to_freemail": "Reply-To points at a consumer freemail domain (Gmail, iCloud, etc.) — common for legitimate platform developer contacts, but a reinforcing handoff signal when the From is a trusted transactional platform pushing a foreign brand.",
     "display_name_email_mismatch": "The display name shows one email address, but the real sending address is a different one entirely.",
     "display_name_is_email": "The display name is itself formatted as an email address, matching the real sender — lower risk on its own, but unusual.",
     "freemail_corporate_persona": "Sent from a free consumer email domain (Gmail, Yahoo, etc.) but the display name claims to be IT/finance/support — a common BEC shape.",
@@ -21,6 +22,11 @@ window.SEG_FLAG_DESCRIPTIONS = {
     "url_redirect_to_page_file": "A redirect link's real destination is a bare .html/.php page on someone else's site — the typical shape of a dropped phishing page.",
     "url_redirect_to_ip": "A redirect/tracker link's real destination is a raw IP address — no legitimate tracker's actual destination is a bare IP.",
     "anchor_href_mismatch": "The clickable text of a link names one domain, but the link actually goes somewhere else.",
+    "service_abuse_testflight_brand_lure": "Legitimate Apple TestFlight mail inviting you to a beta app that impersonates OpenAI, ChatGPT, Meta, or another mega-brand — trusted-channel service abuse (auth looks clean because Apple really sent it).",
+    "trusted_channel_brand_mismatch": "Mail from a trusted transactional platform (e.g. Apple TestFlight) whose subject/body names a foreign mega-brand the platform does not own — brand-vs-channel mismatch.",
+    "trusted_channel_reply_to_freemail": "Trusted-platform From address with Reply-To on consumer freemail — identity handoff to a personal mailbox (reinforcing when paired with a foreign brand lure).",
+    "deception_structure_service_abuse": "Composed deception structure: authentic trusted-platform channel + on-platform links + foreign brand lure. Auth passing is expected; the malice is the structure, not a spoofed envelope.",
+    "lure_scarcity_reward": "Content uses scarcity and/or reward bait (limited seats, free credits) — a common social-engineering reinforcer, not proof on its own.",
     "content_padding_evasion": "The email body contains an unusually large block of blank/whitespace lines — a known trick to bury the real lure or dodge automated content scanning.",
     "urgency_language": "The wording pressures urgent action (deadlines, threats, \"immediately\") — a standard social-engineering tactic.",
     "credential_request": "The wording asks you to log in, verify, or confirm your identity/credentials.",
@@ -61,6 +67,7 @@ window.SEG_FLAG_DESCRIPTIONS = {
     "ai": "AI reviewer identified a pattern not in the standard checklist: {value}",
     "spoofed_attachment_type": "An attachment's actual file type (from its content, not its name) doesn't match its declared extension: {value} — a classic disguised-executable trick.",
     "double_extension_executable": "Attachment filename hides an executable behind a benign-looking extension (e.g. invoice.pdf.exe): {value}",
+    "service_abuse": "Trusted-platform service abuse ({value}): authentic channel mail pushing a foreign brand lure.",
     "correlation_seen_before": "One of this email's indicators (indicator:count = {value}) was already seen in a prior SUSPICIOUS/MALICIOUS verdict from this pipeline's own history.",
     "domain_age_low": "The sender's domain was registered only {value} day(s) ago — newly-registered domains are common phishing infrastructure."
   }

@@ -218,6 +218,12 @@ async def analyze_eml(
     filename = Path(file.filename or "upload.eml").name
     if not filename.lower().endswith(".eml"):
         raise HTTPException(status_code=400, detail="Only .eml files are accepted")
+    # content_type may be None when the client omits it; only reject explicitly
+    # wrong types, not missing ones (curl and simple JS fetch often omit it).
+    ct = (file.content_type or "").lower().split(";")[0].strip()
+    _ALLOWED_CT = {"", "message/rfc822", "application/octet-stream", "text/plain"}
+    if ct not in _ALLOWED_CT:
+        raise HTTPException(status_code=400, detail="Only .eml files are accepted")
 
     raw = await file.read()
     if not raw:
@@ -231,8 +237,8 @@ async def analyze_eml(
     t0 = time.perf_counter()
     try:
         pipeline, pipeline_result = _pipeline_summary(raw, filename, correlation_store=get_correlation_store())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline failed: {e}") from e
+    except Exception:
+        raise HTTPException(status_code=500, detail="Analysis failed — check server logs") from None
 
     try:
         # Import lazily so missing optional deps don't break feed/auth boot.
@@ -248,10 +254,10 @@ async def analyze_eml(
         deep = analyze_eml_bytes(raw, filename, credentials_path=str(creds))
     except HTTPException:
         raise
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Deep analysis failed: {e}") from e
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="Deep analysis service unavailable") from None
+    except Exception:
+        raise HTTPException(status_code=502, detail="Deep analysis failed — check server logs") from None
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
     segs = (pipeline or {}).get("verdict")

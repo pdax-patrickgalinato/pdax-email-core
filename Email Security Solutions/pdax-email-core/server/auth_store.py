@@ -46,6 +46,13 @@ _PBKDF2_ITERATIONS = 200_000
 _SESSION_TTL_SECONDS = 12 * 3600   # 12h — a local admin tool, not a public SaaS
 ROLES = ("admin", "analyst", "viewer")
 
+# Dummy credential for constant-time comparison when username is not found.
+# Pre-computed once at import to avoid timing oracle that reveals valid usernames.
+_DUMMY_SALT = secrets.token_bytes(16)
+_DUMMY_HASH = hashlib.pbkdf2_hmac(
+    "sha256", b"__dummy__", _DUMMY_SALT, _PBKDF2_ITERATIONS
+).hex()
+
 
 class User:
     def __init__(self, id: int, username: str, role: str, disabled: bool = False):
@@ -169,9 +176,17 @@ class AuthStore:
                 (username,),
             ).fetchone()
             if row is None:
+                # Perform a dummy hash to equalise timing for unknown usernames,
+                # preventing a timing side-channel that reveals valid usernames.
+                secrets.compare_digest(
+                    self._hash_password(password, _DUMMY_SALT), _DUMMY_HASH
+                )
                 return None
             user_id, uname, password_hash, salt_hex, role, disabled = row
             if disabled:
+                secrets.compare_digest(
+                    self._hash_password(password, _DUMMY_SALT), _DUMMY_HASH
+                )
                 return None
             candidate = self._hash_password(password, bytes.fromhex(salt_hex))
             if not secrets.compare_digest(candidate, password_hash):

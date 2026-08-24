@@ -12,7 +12,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app import org_config
@@ -23,6 +24,7 @@ from .routers import auth as auth_router
 from .routers import policy as policy_router
 from .routers import feed as feed_router
 from .routers import analyze as analyze_router
+from .security import SecurityHeadersMiddleware
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DASHBOARD_DIR = _ROOT / "dashboard"
@@ -43,7 +45,28 @@ async def _lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Secure Email Gateway Dashboard", lifespan=_lifespan)
+app = FastAPI(
+    title="Secure Email Gateway Dashboard",
+    lifespan=_lifespan,
+    # Disable interactive API docs in production — they enumerate every
+    # route, schema, and parameter for unauthenticated visitors.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+
+# CORS: same-origin only — this is a local admin console, not a public API.
+# allow_origins=[] means no cross-origin requests are permitted.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type"],
+)
+
+# Security response headers on every reply.
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 def get_config():
@@ -61,11 +84,10 @@ def health():
 
 
 @app.get("/api/org")
-def org():
-    """Organization identity (rules/org.yaml, Phase 13 white-labeling) — the
-    dashboard fetches this to render its branding instead of a hardcoded
-    company name, so deploying this for a different organization is a
-    config edit, not a code change."""
+def org(_=Depends(deps.get_current_user)):
+    """Organization identity (rules/org.yaml) — requires a valid session.
+    Branding info is returned only to authenticated dashboard users, not to
+    unauthenticated visitors performing reconnaissance."""
     return org_config.load_org_config()
 
 

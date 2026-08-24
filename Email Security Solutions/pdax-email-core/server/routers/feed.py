@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from .. import activity_log, feed_builder
 from ..auth_store import User
 from ..deps import get_correlation_store, require_role
+from ..security import assert_within_root, validate_queue_id
 from app import disposition
 
 router = APIRouter(prefix="/api")
@@ -38,10 +39,11 @@ def get_audit(_: User = Depends(require_role("admin", "analyst", "viewer"))):
 
 @router.post("/quarantine/{queue_id}/release")
 def release(queue_id: str, user: User = Depends(require_role("admin", "analyst"))):
+    validate_queue_id(queue_id)
     try:
         dest = disposition.release_from_quarantine(_SPOOL_ROOT, queue_id)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="entry not found")
     feed_builder.build_feed(force=True, correlation_store=get_correlation_store())
     activity_log.record(
         "quarantine_release", actor=user.username, actor_role=user.role,
@@ -53,10 +55,11 @@ def release(queue_id: str, user: User = Depends(require_role("admin", "analyst")
 
 @router.post("/quarantine/{queue_id}/keep-blocked")
 def keep_blocked(queue_id: str, user: User = Depends(require_role("admin", "analyst"))):
+    validate_queue_id(queue_id)
     try:
         dest = disposition.keep_blocked(_SPOOL_ROOT, queue_id)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="entry not found")
     feed_builder.build_feed(force=True, correlation_store=get_correlation_store())
     activity_log.record(
         "quarantine_keep_blocked", actor=user.username, actor_role=user.role,
@@ -68,12 +71,13 @@ def keep_blocked(queue_id: str, user: User = Depends(require_role("admin", "anal
 
 @router.post("/quarantine/{queue_id}/reevaluate")
 def reevaluate(queue_id: str, user: User = Depends(require_role("admin", "analyst"))):
+    validate_queue_id(queue_id)
     try:
         # Uses dashboard_content_provider() (GLM when credentials exist).
         result = disposition.reevaluate_spool_entry(
             _SPOOL_ROOT, queue_id, content_provider=feed_builder.dashboard_content_provider())
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="entry not found")
     feed_builder.build_feed(force=True, correlation_store=get_correlation_store())
     verdict = (result or {}).get("verdict") if isinstance(result, dict) else None
     activity_log.record(
@@ -86,16 +90,19 @@ def reevaluate(queue_id: str, user: User = Depends(require_role("admin", "analys
 
 @router.get("/quarantine/{queue_id}/download")
 def download(queue_id: str, user: User = Depends(require_role("admin", "analyst"))):
+    validate_queue_id(queue_id)
     try:
         entries = [e for e in disposition.list_spool_entries(_SPOOL_ROOT) if e["queue_id"] == queue_id]
         if not entries:
             raise FileNotFoundError(queue_id)
         entry = entries[0]
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="entry not found")
     eml_path = Path(entry["path"]) / "message.eml"
+    # Confirm the resolved path stays within the spool root — defence in depth.
+    assert_within_root(eml_path, _SPOOL_ROOT)
     if not eml_path.is_file():
-        raise HTTPException(status_code=404, detail="message.eml not found for this entry")
+        raise HTTPException(status_code=404, detail="entry not found")
     activity_log.record(
         "quarantine_download", actor=user.username, actor_role=user.role,
         detail=f"Downloaded {queue_id}.eml",

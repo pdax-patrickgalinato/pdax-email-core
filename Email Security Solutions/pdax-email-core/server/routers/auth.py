@@ -5,12 +5,19 @@ every other router from here on.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from .. import activity_log
 from ..auth_store import ROLES, User, get_default_store
 from ..deps import SESSION_COOKIE_NAME, get_current_user, require_role
+from ..security import ip_login_limiter, username_lockout
+
+# Set SEG_COOKIE_SECURE=1 when the app is served over HTTPS (behind a TLS
+# reverse proxy). Keeps the flag off for plain HTTP localhost development.
+_COOKIE_SECURE = os.getenv("SEG_COOKIE_SECURE", "").strip() in ("1", "true", "yes")
 
 router = APIRouter(prefix="/api")
 _store = get_default_store()
@@ -46,15 +53,21 @@ def setup_status():
 
 
 @router.post("/setup")
-def setup(body: SetupRequest, response: Response):
+def setup(body: SetupRequest, request: Request, response: Response):
     # 404s once any user exists — the wizard is a one-time, first-run-only
     # path, not a general "create admin" endpoint (that's POST /api/users,
     # admin-gated, below).
     if _store.user_count() > 0:
-        raise HTTPException(status_code=404, detail="setup already completed")
+        raise HTTPException(status_code=404, detail="not found")
+    ip = request.client.host if request.client else "unknown"
+    if ip_login_limiter.is_limited(ip):
+        raise HTTPException(status_code=429, detail="too many requests")
     user = _store.create_user(body.username, body.password, role="admin")
     token = _store.create_session(user.id)
-    response.set_cookie(SESSION_COOKIE_NAME, token, httponly=True, samesite="lax")
+    response.set_cookie(
+        SESSION_COOKIE_NAME, token,
+        httponly=True, samesite="strict", secure=_COOKIE_SECURE,
+    )
     activity_log.record(
         "setup", actor=user.username, actor_role=user.role,
         detail="Created initial admin account",
@@ -63,7 +76,26 @@ def setup(body: SetupRequest, response: Response):
 
 
 @router.post("/auth/login")
-def login(body: LoginRequest, response: Response):
+def login(body: LoginRequest, request: Request, response: Response):
+    ip = request.client.host if request.client else "unknown"
+
+    # IP-level throttle — catches credential spray from one source.
+    if ip_login_limiter.is_limited(ip):
+        activity_log.record(
+            "login_failed", actor=body.username.strip() or "(blank)",
+            detail=f"Rate-limited (IP {ip})",
+        )
+        raise HTTPException(status_code=429, detail="too many requests")
+
+    # Per-username lockout — protects individual accounts from distributed spray.
+    username_key = body.username.lower().strip()
+    if username_lockout.is_limited(username_key):
+        activity_log.record(
+            "login_failed", actor=body.username.strip() or "(blank)",
+            detail="Account temporarily locked after repeated failures",
+        )
+        raise HTTPException(status_code=429, detail="too many requests")
+
     user = _store.verify_password(body.username, body.password)
     if user is None:
         activity_log.record(
@@ -71,8 +103,16 @@ def login(body: LoginRequest, response: Response):
             detail="Invalid username or password",
         )
         raise HTTPException(status_code=401, detail="invalid username or password")
+
+    # Successful login — clear lockout counters.
+    ip_login_limiter.clear(ip)
+    username_lockout.clear(username_key)
+
     token = _store.create_session(user.id)
-    response.set_cookie(SESSION_COOKIE_NAME, token, httponly=True, samesite="lax")
+    response.set_cookie(
+        SESSION_COOKIE_NAME, token,
+        httponly=True, samesite="strict", secure=_COOKIE_SECURE,
+    )
     activity_log.record(
         "login", actor=user.username, actor_role=user.role,
         detail="Session started",

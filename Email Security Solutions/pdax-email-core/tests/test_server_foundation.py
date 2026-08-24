@@ -53,13 +53,18 @@ def test_flag_descriptions_js_served():
         assert "window.SEG_FLAG_DESCRIPTIONS" in r.text
 
 
-def test_org_endpoint_returns_display_name():
+def test_org_endpoint_requires_auth():
     with TestClient(app) as client:
         r = client.get("/api/org")
-        assert r.status_code == 200
-        body = r.json()
-        assert "display_name" in body
-        assert "regulator_context" in body
+        assert r.status_code == 401
+
+
+def test_org_config_has_required_fields():
+    """org_config module always returns display_name and regulator_context."""
+    from app import org_config
+    body = org_config.load_org_config()
+    assert "display_name" in body
+    assert "regulator_context" in body
 
 
 if __name__ == "__main__":

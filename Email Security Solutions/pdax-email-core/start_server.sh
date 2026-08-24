@@ -6,4 +6,5 @@ if [ -f .env ]; then
   source .env
 fi
 
-exec .venv/bin/uvicorn server.main:app --reload --port 8765
+exec .venv/bin/uvicorn server.main:app --reload --port 8765 \
+  --no-server-header

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 _PBKDF2_ITERATIONS = 200_000
 _SESSION_TTL_SECONDS = 12 * 3600   # 12h — a local admin tool, not a public SaaS
+_MAX_SESSIONS_PER_USER = 10        # cap concurrent sessions; oldest evicted on overflow
 ROLES = ("admin", "analyst", "viewer")
 
 # Dummy credential for constant-time comparison when username is not found.
@@ -201,6 +202,17 @@ class AuthStore:
         now = time.time()
         conn = self._connect()
         try:
+            # Prune expired sessions globally (housekeeping — prevents DB bloat).
+            conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
+            # Enforce per-user session cap: evict oldest sessions over the limit.
+            existing = conn.execute(
+                "SELECT token FROM sessions WHERE user_id = ? ORDER BY created_at ASC",
+                (user_id,),
+            ).fetchall()
+            overflow = len(existing) - (_MAX_SESSIONS_PER_USER - 1)
+            if overflow > 0:
+                for (old_token,) in existing[:overflow]:
+                    conn.execute("DELETE FROM sessions WHERE token = ?", (old_token,))
             conn.execute(
                 "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
                 (token, user_id, now, now + _SESSION_TTL_SECONDS),

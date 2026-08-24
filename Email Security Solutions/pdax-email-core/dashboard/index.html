@@ -1831,7 +1831,7 @@
           var s = e.stages[name];
           if (!s) return "";
           var flags = (s.flags && s.flags.length) ? s.flags.join(", ") : "—";
-          return '<div class="stage-row" data-status="' + s.status + '"><span class="sr-name">' + name + '</span><span class="sr-score">' + s.score.toFixed(1) + '</span><span class="sr-flags">' + escapeHtml(flags) + "</span></div>";
+          return '<div class="stage-row" data-status="' + escapeHtml(s.status) + '"><span class="sr-name">' + name + '</span><span class="sr-score">' + s.score.toFixed(1) + '</span><span class="sr-flags">' + escapeHtml(flags) + "</span></div>";
         }).join("") + "</div></div>";
     } else {
       html += '<div class="drawer-field"><span class="df-label">Stages</span>' +

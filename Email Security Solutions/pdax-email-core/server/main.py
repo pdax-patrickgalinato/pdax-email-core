@@ -9,6 +9,8 @@ each phase lands (auth: Phase 10, policy: Phase 11, feed: Phase 12).
 """
 from __future__ import annotations
 
+import os
+import stat
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,7 +26,7 @@ from .routers import auth as auth_router
 from .routers import policy as policy_router
 from .routers import feed as feed_router
 from .routers import analyze as analyze_router
-from .security import SecurityHeadersMiddleware
+from .security import MaxBodySizeMiddleware, SecurityHeadersMiddleware
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DASHBOARD_DIR = _ROOT / "dashboard"
@@ -35,9 +37,24 @@ _DASHBOARD_DIR = _ROOT / "dashboard"
 _config = None
 
 
+def _harden_data_dir() -> None:
+    """Restrict data/ to owner-only on startup — prevents other local users
+    from reading the credentials database or audit log."""
+    data_dir = _ROOT / "data"
+    if data_dir.is_dir():
+        try:
+            os.chmod(data_dir, stat.S_IRWXU)          # 700
+            for p in data_dir.iterdir():
+                if p.is_file():
+                    os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)   # 600
+        except OSError:
+            pass  # best-effort; don't crash startup on permission errors
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     global _config
+    _harden_data_dir()
     _config = runner.load_config()
     cs = correlation_mod.get_default_store()
     deps.set_correlation_store(cs)
@@ -67,6 +84,9 @@ app.add_middleware(
 
 # Security response headers on every reply.
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Global request body size cap — prevents memory exhaustion from oversized bodies.
+app.add_middleware(MaxBodySizeMiddleware)
 
 
 def get_config():

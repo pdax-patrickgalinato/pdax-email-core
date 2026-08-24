@@ -29,8 +29,9 @@ class SetupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    # Length limits prevent DoS via oversized PBKDF2 computation.
+    username: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class CreateUserRequest(BaseModel):
@@ -48,7 +49,10 @@ def _user_out(user: User) -> dict:
 
 
 @router.get("/setup/status")
-def setup_status():
+def setup_status(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    if ip_login_limiter.is_limited(ip):
+        raise HTTPException(status_code=429, detail="too many requests")
     return {"needs_setup": _store.user_count() == 0}
 
 

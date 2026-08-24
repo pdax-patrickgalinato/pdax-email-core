@@ -1,4 +1,4 @@
-"""Security utilities — rate limiting, lockout, and response hardening.
+"""Security utilities — rate limiting, lockout, request size limits, and response hardening.
 
 Three concerns handled here so they don't scatter across routers:
 
@@ -19,6 +19,7 @@ Three concerns handled here so they don't scatter across routers:
 """
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -94,6 +95,44 @@ username_lockout = RateLimiter(max_attempts=5, window_seconds=600, lockout_secon
 
 
 # ---------------------------------------------------------------------------
+# Request body size limit
+# ---------------------------------------------------------------------------
+
+# 16 MB global cap — large enough to allow EML uploads (which have their own
+# 15 MB check), small enough to stop memory-exhaustion from arbitrary POST bodies.
+_BODY_SIZE_LIMIT = int(os.getenv("SEG_MAX_BODY_BYTES", str(16 * 1024 * 1024)))
+
+
+class MaxBodySizeMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds the configured limit.
+
+    Checks the Content-Length header if present; does not buffer or re-read
+    the body, so chunked-encoding requests without a Content-Length bypass
+    this check — in-route limits (EML 15 MB check) handle those.  For a
+    local admin tool, Content-Length checking stops accidental or scripted
+    oversized requests without introducing streaming complexity.
+    """
+
+    def __init__(self, app, max_bytes: int = _BODY_SIZE_LIMIT) -> None:
+        super().__init__(app)
+        self.max_bytes = max_bytes
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        cl = request.headers.get("content-length")
+        if cl is not None:
+            try:
+                if int(cl) > self.max_bytes:
+                    return Response(
+                        content='{"detail":"request too large"}',
+                        status_code=413,
+                        media_type="application/json",
+                    )
+            except ValueError:
+                pass  # malformed Content-Length — let the framework handle it
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # Queue-ID validation
 # ---------------------------------------------------------------------------
 
@@ -135,6 +174,8 @@ _CSP = (
     "base-uri 'self';"
 )
 
+_COOKIE_SECURE = os.getenv("SEG_COOKIE_SECURE", "").strip() in ("1", "true", "yes")
+
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -143,6 +184,11 @@ _SECURITY_HEADERS = {
     "Content-Security-Policy": _CSP,
     "Cache-Control": "no-store",
 }
+
+# Strict-Transport-Security: only meaningful over HTTPS — suppress on plain HTTP
+# so browsers don't mark the site as HSTS-preloaded while it's still on HTTP.
+if _COOKIE_SECURE:
+    _SECURITY_HEADERS["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

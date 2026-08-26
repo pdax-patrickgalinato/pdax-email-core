@@ -14,6 +14,11 @@ uvicorn>=0.30
 httpx>=0.27   # required by starlette.testclient.TestClient for server/ tests only
 python-multipart>=0.0.9   # required for POST /api/analyze/eml (UploadFile)
 
+# Gmail API receiver (gateway/gmail_receiver.py) — post-delivery scanning via Pub/Sub push.
+# google-auth is already a transitive dep of openai/vertexai; adding it explicitly here.
+google-api-python-client>=2.100.0  # Gmail API (users.messages, users.watch)
+google-auth>=2.0                   # Service-account impersonation / DWD
+
 # Enrichment providers (only needed when you wire the real stages):
 # boto3                     # Stage 5 BedrockProvider (Claude, ap-southeast-1) — set SEG_CONTENT_PROVIDER=bedrock
 # google-genai               # Stage 5 GeminiProvider (Google AI Studio) — set SEG_CONTENT_PROVIDER=gemini

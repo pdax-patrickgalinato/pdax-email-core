@@ -1,276 +1,569 @@
-# SEGS Deployment Guide
+# SEGS — AWS ECS Fargate Deployment Guide
 
-**Standing SEGS up in your environment — from evaluation to inline enforcement.**
+## Prerequisites
 
-Last updated: 2026-08-25
-
-This guide is honest about what's ready today versus what needs integration
-work. Read **Phase 0** first — it decides which of the later phases apply to you.
-
----
-
-## Phase 0 — Decide your deployment model
-
-SEGS has one detection brain (`run_pipeline()`) and three ways to feed mail into
-it. Pick based on your mail infrastructure and how aggressive you want to be:
-
-| Model | How mail reaches SEGS | Maturity | Best for |
-|---|---|---|---|
-| **A. Evaluation / shadow** | You drop `.eml` files (or a spool export) into a folder; the hold consumer scans them | ✅ **Ready now** | Proving detection quality against your real mail, risk-free |
-| **B. Inline SMTP hold** | Your MTA (Postfix/Rspamd) holds inbound mail and hands it to SEGS *before* delivery | ⚠️ **Adapter needs building** (spool-based today) | Blocking threats before they land — strongest posture |
-| **C. Post-delivery API** | SEGS pulls delivered mail via Gmail/Graph API and quarantines retroactively | ⚠️ **Receiver needs building** | Google Workspace / M365 with no MTA change |
-
-**Recommended path:** stand up **Model A first** (Phases 1–6, plus 7A) — it gives
-you a real, running system and lets you tune detection on your own traffic in
-shadow mode with zero delivery risk. Graduate to **B or C** (Phase 7) only once
-shadow-mode false-positives are near zero.
-
-**Two decisions to make now:**
-1. Which mail platform are you protecting? (Postfix/Exchange on-prem → Model B; Google Workspace / Microsoft 365 → Model C)
-2. Inline (block before inbox) or post-delivery (quarantine just after)?
+| Requirement | Notes |
+|-------------|-------|
+| AWS CLI v2 | Configured with a role that can manage ECR, ECS, EFS, ALB, Secrets Manager |
+| Docker | For building and pushing images |
+| Python 3.12+ | For `deploy/setup-secrets.sh` helper |
+| Existing PDAX VPC | ap-southeast-1, with private and public subnets in ≥2 AZs |
+| Route 53 hosted zone for `pdax.ph` | Or equivalent DNS admin access |
+| GCP project with Pub/Sub + service account | See [docs/GMAIL_API_SETUP.md](GMAIL_API_SETUP.md) |
+| JumpCloud VPN CIDR | The CIDR block(s) SOC analysts connect from |
 
 ---
 
-## Phase 1 — Provision the host
+## Step 1 — Gather required values
 
-A single modest Linux VM is enough to start (2 vCPU / 4 GB RAM).
+Collect these before starting. Nothing is hardcoded — all values go into Secrets Manager or shell variables.
+
+**AWS**
+```
+AWS_ACCOUNT_ID=<12-digit account ID>
+AWS_REGION=ap-southeast-1
+VPC_ID=vpc-xxxxxxxx
+PRIVATE_SUBNET_IDS=subnet-aaaa,subnet-bbbb    # ≥2 AZs, for dashboard + ECS tasks
+PUBLIC_SUBNET_IDS=subnet-cccc,subnet-dddd     # ≥2 AZs, for receiver ALB
+VPN_CIDR=10.8.0.0/16                          # JumpCloud VPN CIDR
+```
+
+**Domains (request ACM certs via DNS validation in Route 53)**
+```
+DASHBOARD_DOMAIN=segs.pdax.ph          # Internal, VPN-only
+RECEIVER_DOMAIN=segs-mail.pdax.ph      # Public, Google IPs only
+```
+
+**Google (from GCP setup — see GMAIL_API_SETUP.md)**
+```
+SEG_GMAIL_TOPIC=projects/pdax-prod/topics/segs-gmail
+SEG_GMAIL_USERS=security@pdax.ph,pat@pdax.ph
+SEG_PUBSUB_TOKEN=<random token — generate: python3 -c "import secrets; print(secrets.token_urlsafe(32))">
+credentials.json  # GCP service account key file (downloaded from GCP Console)
+```
+
+**Content AI**
+```
+SEG_GLM_MODEL_ID=<from existing .env>
+SEG_GLM_API_KEY=<from existing .env>
+SEG_GLM_PROJECT_ID=<from existing .env>
+# ... fallback model IDs (see .env.example)
+```
+
+**Threat intel**
+```
+SEG_VT_API_KEY=<VirusTotal API key>
+SEG_ABUSEIPDB_API_KEY=<AbuseIPDB API key>
+```
+
+**SMTP notifications**
+```
+SEGS_NOTIFY_SMTP_PASS=<App Password for segs-alerts@pdax.ph>
+```
+
+---
+
+## Step 2 — Create ECR repository
 
 ```bash
-# Debian/Ubuntu example
-sudo apt update && sudo apt install -y python3 python3-venv python3-pip git
-python3 --version        # must be 3.9+ (3.12+ recommended)
-
-# Dedicated service account (never run as root)
-sudo useradd -r -m -d /opt/segs -s /usr/sbin/nologin segs
+aws ecr create-repository \
+  --region ap-southeast-1 \
+  --repository-name pdax/segs \
+  --image-scanning-configuration scanOnPush=true \
+  --encryption-configuration encryptionType=AES256
 ```
-
-Network posture: SEGS binds to **localhost only**; a reverse proxy terminates
-TLS in front (Phase 5). No inbound ports are exposed directly.
 
 ---
 
-## Phase 2 — Install SEGS
+## Step 3 — Create EFS file system
 
 ```bash
-sudo -u segs -H bash
-cd /opt/segs
-git clone https://github.com/ronchaic/segs-secure-email-gateway.git app
-cd app
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python3 -m pytest tests/ -q        # sanity check — expect all green
+# Create file system
+EFS_ID=$(aws efs create-file-system \
+  --region ap-southeast-1 \
+  --performance-mode generalPurpose \
+  --throughput-mode bursting \
+  --encrypted \
+  --query 'FileSystemId' --output text)
+
+echo "EFS_FILESYSTEM_ID=$EFS_ID"
+
+# Create mount targets in each private subnet
+for SUBNET_ID in subnet-aaaa subnet-bbbb; do
+  aws efs create-mount-target \
+    --region ap-southeast-1 \
+    --file-system-id "$EFS_ID" \
+    --subnet-id "$SUBNET_ID" \
+    --security-groups sg-efs-XXXXX   # SG that allows NFS (2049) from ECS tasks
+done
+```
+
+Note the `EFS_FILESYSTEM_ID` — you'll need it in Step 7.
+
+---
+
+## Step 4 — Create IAM roles
+
+### ECS task execution role
+```bash
+# Trust policy
+cat > /tmp/ecs-trust.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+
+aws iam create-role \
+  --role-name segs-ecs-execution-role \
+  --assume-role-policy-document file:///tmp/ecs-trust.json
+
+# Attach managed policies
+aws iam attach-role-policy \
+  --role-name segs-ecs-execution-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+# Allow reading the Secrets Manager secret
+aws iam put-role-policy \
+  --role-name segs-ecs-execution-role \
+  --policy-name segs-secrets-read \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:ap-southeast-1:'$AWS_ACCOUNT_ID':secret:segs/prod*"
+    }]
+  }'
+```
+
+### Lambda execution role (for watch renewal)
+```bash
+aws iam create-role \
+  --role-name segs-lambda-role \
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+
+aws iam attach-role-policy \
+  --role-name segs-lambda-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+aws iam put-role-policy \
+  --role-name segs-lambda-role \
+  --policy-name segs-secrets-read \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:ap-southeast-1:'$AWS_ACCOUNT_ID':secret:segs/prod*"
+    }]
+  }'
 ```
 
 ---
 
-## Phase 3 — Configure (`.env`)
-
-Create `/opt/segs/app/.env` (chmod `600` — it holds secrets). Everything is
-optional; SEGS runs fully offline with none of it. Turn things on deliberately.
+## Step 5 — Request ACM certificates
 
 ```bash
-# ---- Enforcement (start safe) ----
-SEG_ENFORCE=shadow                 # shadow | quarantine | reject  (keep shadow at first)
+# Dashboard (internal ALB — DNS validation in Route 53)
+aws acm request-certificate \
+  --region ap-southeast-1 \
+  --domain-name segs.pdax.ph \
+  --validation-method DNS
 
-# ---- Web console (production) ----
-SEG_COOKIE_SECURE=1                # REQUIRED once you're behind HTTPS (Phase 5)
-
-# ---- AI content analysis (optional; pick ONE provider) ----
-# SEG_CONTENT_PROVIDER=ollama      # RECOMMENDED for production — self-hosted, no data leaves your infra, no per-call cost
-# SEG_OLLAMA_MODEL_ID=llama3       # a model you've `ollama pull`-ed
-# SEG_LLM_TRIAGE=1                 # only spend an LLM call on ambiguous mail (production volume control)
-
-# ---- Threat intel (optional) ----
-# SEG_INTEL_CLIENT=vt_abuseipdb
-# SEG_VT_API_KEY=...
-# SEG_ABUSEIPDB_API_KEY=...
-
-# ---- Enrichment (optional) ----
-# SEG_CORRELATION_STORE=1          # behavioral campaign correlation (recommended for a real gateway)
-# SEG_RDAP_LOOKUP=1                # newly-registered-domain checks
-
-# ---- Deep EML analyzer (optional; needs GCP creds) ----
-# SEG_GLM_CREDENTIALS_PATH=/opt/segs/app/credentials.json
+# Receiver (internet-facing ALB)
+aws acm request-certificate \
+  --region ap-southeast-1 \
+  --domain-name segs-mail.pdax.ph \
+  --validation-method DNS
 ```
 
-> **Data-residency note (important for regulated environments):** the cloud AI
-> providers (Gemini, GLM) send email content off your infrastructure and carry
-> RA 10173 / DPO sign-off caveats documented in `README.md`. **Self-hosted
-> Ollama is the recommended production default** precisely because nothing
-> leaves your network. Choose the provider as a governance decision, not just a
-> technical one.
+Add the CNAME records to Route 53 as prompted by the ACM console. Validation completes in ~5 minutes.
 
 ---
 
-## Phase 4 — First run & create the admin
+## Step 6 — Store secrets in AWS Secrets Manager
+
+From the repo root (with `credentials.json` present):
 
 ```bash
-cd /opt/segs/app && source .venv/bin/activate
-uvicorn server.main:app --host 127.0.0.1 --port 8765 --no-server-header
+AWS_ACCOUNT_ID=123456789012 bash deploy/setup-secrets.sh
 ```
 
-Browse to the console (via your proxy once Phase 5 is done). On first launch it
-shows a **one-time setup wizard** — create the initial **admin** account. After
-that, log in (roles: Admin / Analyst / Viewer) and add analyst/viewer users
-under user management.
+This prompts for each secret value interactively, reads `credentials.json`, converts it to a single-line JSON string, and creates (or updates) the `segs/prod` secret.
 
----
-
-## Phase 5 — Harden for production
-
-**5a. Run it as a service** (`/etc/systemd/system/segs.service`):
-
-```ini
-[Unit]
-Description=SEGS Secure Email Gateway console
-After=network.target
-
-[Service]
-User=segs
-WorkingDirectory=/opt/segs/app
-EnvironmentFile=/opt/segs/app/.env
-ExecStart=/opt/segs/app/.venv/bin/uvicorn server.main:app --host 127.0.0.1 --port 8765 --no-server-header
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
+To update a single key later:
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now segs
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id segs/prod \
+  --secret-string "$(aws secretsmanager get-secret-value \
+    --region ap-southeast-1 --secret-id segs/prod \
+    --query SecretString --output text \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); d['SEG_VT_API_KEY']='NEW_KEY'; print(json.dumps(d))")"
 ```
-
-**5b. TLS reverse proxy** (nginx in front, terminating HTTPS, proxying to
-`127.0.0.1:8765`). Once HTTPS is live, `SEG_COOKIE_SECURE=1` activates the
-`Secure` cookie flag and HSTS.
-
-**5c. What's already hardened for you** (from the VAPT pass — no action needed):
-rate limiting + account lockout, PBKDF2 sessions, strict cookies, full security
-headers (CSP/HSTS), disabled API docs, SSRF/XSS/path-traversal/log-injection
-defenses, and owner-only secrets/quarantine storage that re-lock on every boot.
-
-**5d. Restrict console access** to your SOC network (proxy allowlist / VPN /
-firewall) — it's an admin tool, not a public site.
 
 ---
 
-## Phase 6 — Tune detection before you enforce
+## Step 7 — Fill in placeholders in task definitions
 
-Don't enable blocking against defaults. Calibrate first:
+Edit `ecs/task-definition-dashboard.json` and `ecs/task-definition-receiver.json`:
 
 ```bash
-# Build a golden set: defanged real quarantine mail + known-good legitimate mail
-python3 tests/run_eval.py samples/        # precision/recall on your corpus
-```
+# Replace all REPLACE_AWS_ACCOUNT_ID occurrences
+sed -i "s/REPLACE_AWS_ACCOUNT_ID/$AWS_ACCOUNT_ID/g" \
+  ecs/task-definition-dashboard.json \
+  ecs/task-definition-receiver.json
 
-- Adjust stage weights and verdict thresholds in `rules/weights.yaml`.
-- Set protection policies in `rules/policy.yaml` (the 6 TMES-parity categories),
-  or toggle them live in the console (Admin → policy).
-- Re-run `run_eval.py` until precision/recall meet your targets.
+# Replace REPLACE_EFS_FILESYSTEM_ID with your EFS ID
+sed -i "s/REPLACE_EFS_FILESYSTEM_ID/$EFS_ID/g" \
+  ecs/task-definition-dashboard.json \
+  ecs/task-definition-receiver.json
+```
 
 ---
 
-## Phase 7 — Connect your mail flow
-
-### 7A. Model A — Evaluation / shadow (ready now)
-
-Point your mail system to export a copy of inbound mail as `.eml` into a hold
-folder, then scan it:
+## Step 8 — Create CloudWatch log groups
 
 ```bash
-# One message, or a whole directory — shadow mode logs the intended action but releases everything
-SEG_ENFORCE=shadow python3 gateway/hold_consumer.py /path/to/held/mail/
+aws logs create-log-group --log-group-name /segs/dashboard --region ap-southeast-1
+aws logs create-log-group --log-group-name /segs/receiver  --region ap-southeast-1
 
-# Review what SEGS *would* have done
-python3 gateway/hold_consumer.py --list
-python3 gateway/hold_consumer.py --reeval <queue_id>
+# Retention: 90 days (adjust to your policy)
+aws logs put-retention-policy --log-group-name /segs/dashboard \
+  --retention-in-days 90 --region ap-southeast-1
+aws logs put-retention-policy --log-group-name /segs/receiver \
+  --retention-in-days 90 --region ap-southeast-1
 ```
-
-Results land under `gateway/spool/` (`quarantine/`, `rejected/`, `released/`,
-`shadow_logs/`) and appear in the console's live feed. This is a genuine,
-risk-free production trial on your own traffic.
-
-### 7B. Model B — Inline SMTP hold (integration work required)
-
-The consumer logic is built (`gateway/hold_consumer.py`, `source="smtp_hold"`);
-what you build is the **MTA adapter**:
-
-1. Configure **Postfix/Rspamd** to HOLD inbound mail (e.g. Rspamd `soft reject`
-   → hold queue, or a Postfix `hold` action) and write each message to the SEGS
-   spool.
-2. Implement an **`EnforcementClient`** (same Protocol as `LocalQuarantineClient`
-   in `app/disposition.py`) that performs the real actions: **RELEASE** to the
-   inbox path, **quarantine** to a mailbox/folder, or **550 REJECT**. Keep the
-   spool (or a DB) for re-evaluation — never put SMTP calls in `verdict.py`.
-3. Run `hold_consumer.py` as a service watching the hold queue.
-
-This is the one piece that needs your infrastructure's specifics — I can help
-build the adapter once your MTA is chosen.
-
-### 7C. Model C — Post-delivery API (integration work required)
-
-Build a small receiver that pulls delivered mail via the **Gmail API** or
-**Microsoft Graph**, calls `run_pipeline(raw, source="gmail_api")`, and moves
-malicious mail to a quarantine label/folder via the same API. Reuses the entire
-detection core unchanged.
 
 ---
 
-## Phase 8 — Graduate enforcement (the safety ramp)
-
-Move one step at a time, watching the shadow logs / audit trail between steps:
-
-```
-SEG_ENFORCE=shadow      →   SEG_ENFORCE=quarantine   →   SEG_ENFORCE=reject
-(log only, deliver all)     (hold SUSPICIOUS/MAL)         (may 550 MALICIOUS)
-```
-
-- Stay in **shadow** until false-positives on real mail are essentially zero.
-- Move to **quarantine** (reversible — analysts release false positives from the
-  console).
-- Only enable **reject** after quarantine is proven, and even then it 550s
-  MALICIOUS only if `rules/disposition.yaml` sets `allow_reject_on_malicious: true`.
-  A 550 loses mail permanently; a quarantine is recoverable.
-
----
-
-## Phase 9 — Operations
-
-- **Analyst workflow:** triage the live feed; release / keep-blocked / re-evaluate
-  / download quarantined mail from the console. Every action is audit-logged.
-- **Re-evaluation:** `hold_consumer.py --reeval-all` re-scans held mail as
-  detection improves; `--auto-release` frees anything now-benign.
-- **Deep investigation:** upload any `.eml` to the console's Analyze page for the
-  full forensic report (needs `SEG_GLM_CREDENTIALS_PATH`).
-- **Monitoring:** alert on lockout / repeated-401 spikes in the activity audit
-  log; watch `gateway/spool/shadow_logs/`.
-- **Backups:** back up `data/` (users, sessions, correlation history) and
-  `gateway/spool/` (quarantined evidence). Both are owner-only and gitignored.
-- **Updates:** `git pull && pip install -r requirements.txt && pytest -q &&
-  sudo systemctl restart segs`.
-
----
-
-## Quick reference — the minimum viable deployment
+## Step 9 — Create ECS cluster
 
 ```bash
-# 1. Host
-sudo apt install -y python3 python3-venv git
-
-# 2. Install
-git clone https://github.com/ronchaic/segs-secure-email-gateway.git && cd segs-secure-email-gateway
-python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-
-# 3. Configure (safe defaults)
-echo "SEG_ENFORCE=shadow" > .env
-
-# 4. Run the console → create admin in the setup wizard
-uvicorn server.main:app --host 127.0.0.1 --port 8765 --no-server-header
-
-# 5. Trial detection on your mail, risk-free
-python3 gateway/hold_consumer.py /path/to/exported/mail/
-python3 gateway/hold_consumer.py --list
+aws ecs create-cluster \
+  --cluster-name segs \
+  --region ap-southeast-1 \
+  --capacity-providers FARGATE FARGATE_SPOT \
+  --default-capacity-provider-strategy \
+    capacityProvider=FARGATE,weight=1
 ```
 
-Then tune (Phase 6), harden (Phase 5), and graduate enforcement (Phase 8).
+---
+
+## Step 10 — Build and push container images
+
+From the repo root:
+
+```bash
+export AWS_ACCOUNT_ID=123456789012
+export AWS_REGION=ap-southeast-1
+export ECR_REPO=pdax/segs
+
+bash deploy/push-images.sh
+```
+
+This builds both images, tags them with the current Git SHA and `latest`, and pushes to ECR. The script logs into ECR automatically.
+
+---
+
+## Step 11 — Create security groups
+
+### Dashboard ALB SG (VPN-only HTTPS)
+```bash
+DASHBOARD_ALB_SG=$(aws ec2 create-security-group \
+  --vpc-id $VPC_ID \
+  --group-name segs-dashboard-alb \
+  --description "SEGS dashboard ALB — VPN only" \
+  --query 'GroupId' --output text)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $DASHBOARD_ALB_SG \
+  --protocol tcp --port 443 --cidr $VPN_CIDR
+```
+
+### Receiver ALB SG (Google Pub/Sub IPs)
+```bash
+RECEIVER_ALB_SG=$(aws ec2 create-security-group \
+  --vpc-id $VPC_ID \
+  --group-name segs-receiver-alb \
+  --description "SEGS receiver ALB — Google IPs via WAF" \
+  --query 'GroupId' --output text)
+
+# Allow 443 from all IPs — WAF enforces Google-IP restriction
+aws ec2 authorize-security-group-ingress \
+  --group-id $RECEIVER_ALB_SG \
+  --protocol tcp --port 443 --cidr 0.0.0.0/0
+```
+
+> **WAF IP set for receiver**: Because Google Cloud publishes 997+ IP ranges (exceeding the 60-rule security group limit), apply restrictions via AWS WAF. Create a WAF Web ACL on the receiver ALB, add an IP set from `deploy/google-pubsub-ips.txt`, and set the default action to BLOCK. Refresh the IP list quarterly.
+
+### ECS task SGs (private, receive from ALB only)
+```bash
+DASHBOARD_TASK_SG=$(aws ec2 create-security-group \
+  --vpc-id $VPC_ID \
+  --group-name segs-dashboard-task \
+  --description "SEGS dashboard ECS task" \
+  --query 'GroupId' --output text)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $DASHBOARD_TASK_SG \
+  --protocol tcp --port 8765 \
+  --source-group $DASHBOARD_ALB_SG
+
+RECEIVER_TASK_SG=$(aws ec2 create-security-group \
+  --vpc-id $VPC_ID \
+  --group-name segs-receiver-task \
+  --description "SEGS receiver ECS task" \
+  --query 'GroupId' --output text)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $RECEIVER_TASK_SG \
+  --protocol tcp --port 8766 \
+  --source-group $RECEIVER_ALB_SG
+```
+
+---
+
+## Step 12 — Create ALBs, target groups, and listeners
+
+This step is verbose. Use the AWS Console or Terraform for readability. Key settings:
+
+| ALB | Scheme | Subnets | SG | Listener | Protocol |
+|-----|--------|---------|-----|----------|---------|
+| segs-dashboard-alb | internal | Private subnets | `$DASHBOARD_ALB_SG` | 443 HTTPS → TG port 8765 | HTTP/1.1 |
+| segs-receiver-alb | internet-facing | Public subnets | `$RECEIVER_ALB_SG` | 443 HTTPS → TG port 8766 | HTTP/1.1 |
+
+Target group health check paths:
+- Dashboard: `GET /api/health` → expect 200
+- Receiver: `GET /health` → expect 200
+
+Assign the ACM certificates from Step 5 to the respective HTTPS listeners.
+
+---
+
+## Step 13 — Register task definitions and create services
+
+```bash
+export AWS_ACCOUNT_ID=123456789012
+export EFS_FILESYSTEM_ID=fs-xxxxxxxxx
+
+bash deploy/update-service.sh
+```
+
+`deploy/update-service.sh` registers both task definitions and then runs `aws ecs create-service` (if not yet created) or `aws ecs update-service --force-new-deployment`. It waits for `services-stable` before exiting.
+
+If this is the first deploy (services don't exist yet), create them first:
+
+```bash
+# Dashboard service
+aws ecs create-service \
+  --cluster segs \
+  --service-name segs-dashboard \
+  --task-definition segs-dashboard \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_IDS],securityGroups=[$DASHBOARD_TASK_SG],assignPublicIp=DISABLED}" \
+  --load-balancers "targetGroupArn=$DASHBOARD_TG_ARN,containerName=segs-dashboard,containerPort=8765"
+
+# Receiver service
+aws ecs create-service \
+  --cluster segs \
+  --service-name segs-receiver \
+  --task-definition segs-receiver \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_IDS],securityGroups=[$RECEIVER_TASK_SG],assignPublicIp=DISABLED}" \
+  --load-balancers "targetGroupArn=$RECEIVER_TG_ARN,containerName=segs-receiver,containerPort=8766"
+```
+
+---
+
+## Step 14 — Configure DNS
+
+Add A records (ALB alias) in Route 53:
+
+| Name | Type | Value |
+|------|------|-------|
+| `segs.pdax.ph` | A (Alias) | segs-dashboard-alb DNS name |
+| `segs-mail.pdax.ph` | A (Alias) | segs-receiver-alb DNS name |
+
+---
+
+## Step 15 — Configure Pub/Sub push subscription
+
+In GCP Console → Pub/Sub → your topic → Subscriptions:
+
+```
+Delivery type: Push
+Endpoint URL: https://segs-mail.pdax.ph/pubsub
+Authentication: Add authorization header
+  Header name: Authorization
+  Header value: Bearer <SEG_PUBSUB_TOKEN>
+Acknowledgement deadline: 60 seconds
+Retry policy: Retry with exponential backoff (minimum 10s, maximum 600s)
+Message retention: 7 days
+```
+
+---
+
+## Step 16 — Register Gmail watches
+
+For each monitored mailbox, trigger a watch registration:
+
+```bash
+# From a machine inside the VPN, or via curl through JumpCloud
+curl -X POST https://segs.pdax.ph/watch/security@pdax.ph \
+  -H "Cookie: session=<admin session cookie>" \
+  -H "Content-Type: application/json"
+```
+
+Or access the dashboard → Settings → Gmail Watches → Register.
+
+The watch auto-renews on every ECS task restart via the lifespan hook in `gateway/gmail_receiver.py`. The EventBridge Lambda provides a daily fallback.
+
+---
+
+## Step 17 — Deploy Lambda watch renewal fallback
+
+```bash
+cd deploy
+zip lambda_renew_watches.zip lambda_renew_watches.py
+
+aws lambda create-function \
+  --function-name segs-renew-watches \
+  --runtime python3.12 \
+  --handler lambda_renew_watches.handler \
+  --role arn:aws:iam::$AWS_ACCOUNT_ID:role/segs-lambda-role \
+  --zip-file fileb://lambda_renew_watches.zip \
+  --environment "Variables={RECEIVER_URL=https://segs-mail.pdax.ph,SECRET_NAME=segs/prod}"
+
+# EventBridge rule: daily at 00:00 PHT (16:00 UTC)
+aws events put-rule \
+  --name segs-renew-watches-daily \
+  --schedule-expression "cron(0 16 * * ? *)" \
+  --state ENABLED
+
+aws lambda add-permission \
+  --function-name segs-renew-watches \
+  --statement-id segs-eventbridge \
+  --action lambda:InvokeFunction \
+  --principal events.amazonaws.com \
+  --source-arn arn:aws:events:ap-southeast-1:$AWS_ACCOUNT_ID:rule/segs-renew-watches-daily
+
+aws events put-targets \
+  --rule segs-renew-watches-daily \
+  --targets "Id=1,Arn=arn:aws:lambda:ap-southeast-1:$AWS_ACCOUNT_ID:function:segs-renew-watches"
+```
+
+---
+
+## Step 18 — Create CloudWatch alarms
+
+```bash
+SNS_ARN=arn:aws:sns:ap-southeast-1:$AWS_ACCOUNT_ID:segs-alerts
+
+# Dashboard unhealthy
+aws cloudwatch put-metric-alarm \
+  --alarm-name segs-dashboard-unhealthy \
+  --metric-name HealthyHostCount \
+  --namespace AWS/ApplicationELB \
+  --dimensions Name=TargetGroup,Value=$DASHBOARD_TG_ID Name=LoadBalancer,Value=$DASHBOARD_ALB_ID \
+  --statistic Minimum --period 60 --evaluation-periods 2 \
+  --threshold 1 --comparison-operator LessThanThreshold \
+  --alarm-actions $SNS_ARN
+
+# Watch renewal failed (log-based)
+aws logs put-metric-filter \
+  --log-group-name /segs/receiver \
+  --filter-name watch-renewal-failed \
+  --filter-pattern "watch renewal FAILED" \
+  --metric-transformations \
+    metricName=WatchRenewalFailed,metricNamespace=SEGS,metricValue=1
+
+aws cloudwatch put-metric-alarm \
+  --alarm-name segs-watch-renewal-failed \
+  --metric-name WatchRenewalFailed \
+  --namespace SEGS \
+  --statistic Sum --period 86400 --evaluation-periods 1 \
+  --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold \
+  --alarm-actions $SNS_ARN
+```
+
+---
+
+## Post-deploy verification
+
+```bash
+# 1. Both services stable
+aws ecs describe-services \
+  --cluster segs --services segs-dashboard segs-receiver \
+  --query 'services[*].[serviceName,runningCount,desiredCount,status]' \
+  --output table
+
+# 2. Health checks passing (from within VPN)
+curl -sf https://segs.pdax.ph/api/health && echo OK
+curl -sf https://segs-mail.pdax.ph/health && echo OK
+
+# 3. Security headers on dashboard
+curl -I https://segs.pdax.ph/api/health | grep -E "Strict-Transport|X-Frame|Set-Cookie"
+
+# 4. Dashboard blocked without VPN (run from outside network)
+# Should timeout or return 403
+
+# 5. Watch renewal logged on receiver startup
+aws logs filter-log-events \
+  --log-group-name /segs/receiver \
+  --filter-pattern "watch renewed" \
+  --start-time $(date -d '1 hour ago' +%s000)
+
+# 6. Send a test phishing email to a monitored mailbox
+# → Gmail should apply SEGS-Quarantine label within 30 seconds
+# → Dashboard feed should show the verdict
+```
+
+---
+
+## Ongoing maintenance
+
+### Deploying a code update
+
+```bash
+bash deploy/push-images.sh        # rebuild + push
+bash deploy/update-service.sh     # register new task def + force deploy
+```
+
+### Rotating a secret
+
+```bash
+AWS_ACCOUNT_ID=123456789012 bash deploy/setup-secrets.sh
+bash deploy/update-service.sh     # restart tasks to pick up new secret
+```
+
+### Scaling
+
+```bash
+# Scale dashboard service
+aws ecs update-service \
+  --cluster segs --service segs-dashboard \
+  --desired-count 2
+
+# Receiver does not benefit from multiple tasks unless Pub/Sub
+# delivery rate exceeds single-task capacity.
+```
+
+### Refreshing Google IP list for WAF
+
+```bash
+curl -s https://www.gstatic.com/ipranges/cloud.json \
+  | python3 -c "import json,sys; [print(p['ipv4Prefix']) for p in json.load(sys.stdin)['prefixes'] if 'ipv4Prefix' in p]" \
+  > deploy/google-pubsub-ips.txt
+# Then update the WAF IP set in the Console or via aws wafv2 update-ip-set
+```
+
+Refresh quarterly. Google publishes changes at `https://www.gstatic.com/ipranges/cloud-services.json` (change notification feed).

@@ -28,6 +28,7 @@ from .routers import feed as feed_router
 from .routers import analyze as analyze_router
 from .routers import enforcement as enforcement_router
 from .routers import lists as lists_router
+from .routers import slack_config as slack_config_router
 from .security import MaxBodySizeMiddleware, SecurityHeadersMiddleware
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -133,6 +134,7 @@ app.include_router(feed_router.router)
 app.include_router(analyze_router.router)
 app.include_router(enforcement_router.router)
 app.include_router(lists_router.router)
+app.include_router(slack_config_router.router)
 
 
 # Static dashboard last — catches everything not matched by an API route

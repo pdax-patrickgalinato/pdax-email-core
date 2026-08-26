@@ -41,7 +41,31 @@ from app.disposition import (  # noqa: E402
     reevaluate_spool_entry, release_from_quarantine, resolve_enforce_mode,
 )
 from app.pipeline.runner import run_pipeline  # noqa: E402
-from app.report import text_report, audit_record  # noqa: E402
+from app.report import text_report, audit_record, send_slack_alert  # noqa: E402
+
+_RULES_DIR = Path(__file__).resolve().parents[1] / "rules"
+
+
+def _load_slack_config() -> dict:
+    import yaml
+    path = _RULES_DIR / "slack_config.yaml"
+    try:
+        if path.is_file():
+            return yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        pass
+    return {}
+
+
+def _maybe_slack_alert(result) -> None:
+    cfg = _load_slack_config()
+    if not cfg.get("enabled"):
+        return
+    url = cfg.get("webhook_url", "").strip()
+    if not url:
+        return
+    threshold = cfg.get("threshold", "SUSPICIOUS")
+    send_slack_alert(result, url, threshold)
 
 
 def _iter_eml(path: Path):
@@ -100,6 +124,7 @@ def process_one(eml_path: Path, client, print_report: bool = True) -> dict:
     # the record, so the deep report is persisted alongside the verdict.
     _maybe_deep_analyze(raw, eml_path.name, result)
     applied = client.apply(queue_id, raw, result)
+    _maybe_slack_alert(result)
     summary = {
         "file": str(eml_path),
         "queue_id": queue_id,

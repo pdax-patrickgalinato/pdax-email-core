@@ -552,6 +552,45 @@ def slack_blocks(r: PipelineResult) -> dict:
     }
 
 
+def send_slack_alert(result: PipelineResult, webhook_url: str, threshold: str = "SUSPICIOUS") -> None:
+    """POST a Slack Block Kit alert for SUSPICIOUS / MALICIOUS verdicts.
+
+    threshold — minimum verdict level to alert on: "SUSPICIOUS" (default) or "MALICIOUS".
+    Uses only stdlib (urllib.request) so no new dependency is needed.
+    Failures are logged to stderr and never re-raised — a Slack outage must
+    never block the email pipeline.
+    """
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    ordered = ("CLEAN", "LOW", "SUSPICIOUS", "MALICIOUS")
+    try:
+        min_idx = ordered.index(threshold.upper())
+    except ValueError:
+        min_idx = ordered.index("SUSPICIOUS")
+
+    try:
+        verdict_idx = ordered.index(result.verdict.value.upper())
+    except ValueError:
+        return  # unknown verdict — skip
+
+    if verdict_idx < min_idx:
+        return
+
+    try:
+        payload = _json.dumps(slack_blocks(result)).encode()
+        req = urllib.request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as exc:
+        import sys
+        print(f"[SEGS] Slack alert failed: {exc}", file=sys.stderr)
+
+
 def audit_record(r: PipelineResult) -> str:
     ai_summary = next(
         (s.facts["summary"] for s in r.stages

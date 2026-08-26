@@ -1,0 +1,7 @@
+# SEGS Slack alerting configuration — written by PUT /api/slack-config (admin only).
+# Changes take effect on the next email processed (no restart needed).
+enabled: false
+webhook_url: ""
+threshold: SUSPICIOUS
+updated_by: system
+updated_at: ""

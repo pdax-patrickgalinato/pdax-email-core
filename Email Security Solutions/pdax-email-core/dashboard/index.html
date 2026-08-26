@@ -1106,6 +1106,40 @@
           <div class="empty-state" id="listsEmpty" style="display:none;">No entries yet.</div>
         </div>
 
+        <!-- Slack alerting (admin only) -->
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Slack alerts</h2>
+              <div class="card-sub">Send a Block Kit notification to a Slack webhook when suspicious or malicious mail is detected.</div>
+            </div>
+            <span class="enforce-badge" id="slackBadge" style="background:var(--status-neutral);color:var(--ink);">Disabled</span>
+          </div>
+          <form id="slackConfigForm" style="display:flex;flex-direction:column;gap:12px;max-width:520px;" autocomplete="off">
+            <label style="font-size:13px;font-weight:500;">
+              Webhook URL
+              <input id="slackWebhookUrl" class="search-input" style="width:100%;margin-top:4px;"
+                type="url" placeholder="https://hooks.slack.com/services/…" autocomplete="off" />
+              <span id="slackWebhookMasked" style="font-size:11.5px;color:var(--ink-muted);margin-top:2px;display:block;"></span>
+            </label>
+            <label style="font-size:13px;font-weight:500;">
+              Alert threshold
+              <select id="slackThreshold" class="search-input" style="width:180px;margin-top:4px;">
+                <option value="SUSPICIOUS">Suspicious &amp; above</option>
+                <option value="MALICIOUS">Malicious only</option>
+              </select>
+            </label>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" id="slackEnabled" />
+                Enable Slack alerts
+              </label>
+              <button type="submit" class="btn btn-sm" id="slackSaveBtn">Save</button>
+            </div>
+            <div id="slackMsg" style="font-size:12.5px;color:var(--status-ok);min-height:18px;"></div>
+          </form>
+        </div>
+
       </section>
 
       <!-- ============================== PAGE: AUDIT LOG ============================== -->
@@ -2811,6 +2845,51 @@
       .finally(function () { btn.disabled = false; });
   });
 
+  // ===== SLACK CONFIG =====
+  function loadSlackConfig() {
+    if (!isAdmin()) return;
+    fetch("/api/slack-config", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (cfg) {
+        document.getElementById("slackEnabled").checked = !!cfg.enabled;
+        document.getElementById("slackThreshold").value = cfg.threshold || "SUSPICIOUS";
+        document.getElementById("slackWebhookMasked").textContent =
+          cfg.webhook_url_masked ? "Current: " + cfg.webhook_url_masked : "";
+        var badge = document.getElementById("slackBadge");
+        if (badge) {
+          badge.textContent = cfg.enabled ? "Enabled" : "Disabled";
+          badge.style.background = cfg.enabled ? "var(--status-ok)" : "var(--status-neutral)";
+          badge.style.color = cfg.enabled ? "#fff" : "var(--ink)";
+        }
+      }).catch(function () {});
+  }
+
+  document.getElementById("slackConfigForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var btn = document.getElementById("slackSaveBtn");
+    btn.disabled = true;
+    var msg = document.getElementById("slackMsg");
+    msg.textContent = "";
+    var url = document.getElementById("slackWebhookUrl").value.trim();
+    var threshold = document.getElementById("slackThreshold").value;
+    var enabled = document.getElementById("slackEnabled").checked;
+    fetch("/api/slack-config", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: enabled, webhook_url: url, threshold: threshold })
+    }).then(function (r) {
+      if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || r.status); });
+      msg.textContent = "Saved.";
+      document.getElementById("slackWebhookUrl").value = "";
+      loadSlackConfig();
+      toast(ICON.good, "Slack config saved");
+    }).catch(function (err) {
+      msg.style.color = "var(--status-critical)";
+      msg.textContent = err.message || String(err);
+    }).finally(function () { btn.disabled = false; });
+  });
+
   function chipHtml(cls, label) {
     return '<span class="chip ' + cls + '">' + escapeHtml(label) + "</span>";
   }
@@ -3246,7 +3325,7 @@
     });
     document.getElementById("pageTitle").textContent = PAGE_META[page][0];
     document.getElementById("pageSub").textContent = PAGE_META[page][1];
-    if (page === "settings") { loadEnforcement(); loadPolicy().then(renderPolicyPanel); if (admin) { loadUsers(); loadLists(); } }
+    if (page === "settings") { loadEnforcement(); loadPolicy().then(renderPolicyPanel); if (admin) { loadUsers(); loadLists(); loadSlackConfig(); } }
   }
   Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (btn) {
     btn.addEventListener("click", function () { setPage(btn.dataset.page); });

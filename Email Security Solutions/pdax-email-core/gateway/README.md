@@ -75,8 +75,65 @@ SEG_ENFORCE=quarantine python3 gateway/hold_consumer.py gateway/spool/hold/
 | SUSPICIOUS | QUARANTINE |
 | MALICIOUS | QUARANTINE (REJECT only when enabled) |
 
-## Production (not wired yet)
+## Path B upgrade — pre-delivery Postfix/Rspamd gateway
 
-Replace `LocalQuarantineClient` with a Postfix/Rspamd adapter that implements
-the same `EnforcementClient` Protocol (RELEASE / quarantine mailbox / 550).
-Keep the same spool (or a DB) for re-eval — do not put SMTP calls in `verdict.py`.
+The platform currently runs **Path A** (post-delivery Gmail API scanning). When
+you are ready to intercept mail before delivery (Path B), only three things change:
+
+### Step 1 — Write a `PostfixMilterClient`
+
+The only new code is a class that implements the `EnforcementClient` Protocol
+defined in `app/disposition.py:156`:
+
+```python
+class EnforcementClient(Protocol):
+    def apply(self, queue_id: str, raw: bytes, result: PipelineResult) -> str: ...
+```
+
+The milter adapter calls back into Postfix via a milter socket
+(use `python-milter` library):
+
+```python
+class PostfixMilterClient:
+    def apply(self, queue_id: str, raw: bytes, result: PipelineResult) -> str:
+        disposition = get_disposition(result.verdict)
+        if disposition == Disposition.DELIVER:
+            milter_continue()          # SMFIS_CONTINUE
+            return "delivered"
+        elif disposition == Disposition.QUARANTINE:
+            milter_quarantine(queue_id)  # move to quarantine queue
+            return "quarantined"
+        elif disposition == Disposition.REJECT:
+            milter_reject("550 5.7.1 Message rejected by SEGS")
+            return "rejected"
+```
+
+Pass it to `process_one()` in `hold_consumer.py` in place of `LocalQuarantineClient`.
+The spool structure, quarantine dashboard, re-evaluation, and release UI all work
+unchanged — they operate on the same spool paths.
+
+### Step 2 — Change MX DNS
+
+Point your domain's MX record from `aspmx.l.google.com` to your Postfix server.
+Google Workspace receives clean mail forwarded from Postfix (configured as a
+"smart host" or relay). This is a one-line DNS change.
+
+### Step 3 — Flip the enforcement mode
+
+```bash
+# In AWS Secrets Manager / .env
+SEG_ENFORCE=quarantine
+```
+
+No code redeployment required. The switch takes effect on the next ECS task restart
+(run `bash deploy/update-service.sh` to force it immediately).
+
+### Checklist before Path B cutover
+
+- [ ] `PostfixMilterClient` written and unit-tested
+- [ ] Postfix + Rspamd server running (separate from SEGS ECS)
+- [ ] SEGS pipeline accuracy validated on 2+ weeks of real traffic (Path A shadow mode)
+- [ ] False-positive rate acceptable (< 0.1% of clean mail flagged)
+- [ ] Runbook written for analysts: how to release a quarantined email, how to report an FP
+- [ ] MX change tested in staging domain first
+- [ ] Rollback plan: revert MX record (< 5 min TTL change)

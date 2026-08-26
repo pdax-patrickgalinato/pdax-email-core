@@ -23,7 +23,7 @@ google-auth>=2.0                   # Service-account impersonation / DWD
 # boto3                     # Stage 5 BedrockProvider (Claude, ap-southeast-1) — set SEG_CONTENT_PROVIDER=bedrock
 # google-genai               # Stage 5 GeminiProvider (Google AI Studio) — set SEG_CONTENT_PROVIDER=gemini
 #                             # NOTE: no region pinning, needs DPO sign-off under RA 10173 before real mail (see content_ai.py)
-# openai                     # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI Model Garden MaaS) — set SEG_CONTENT_PROVIDER=glm
+openai                      # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI Model Garden MaaS) — set SEG_CONTENT_PROVIDER=glm
 #                             # NOTE: endpoint is locations/global (region-pinning unconfirmed) + third-party model provenance — see content_ai.py
 #                             # Also shared by OllamaProvider (local, self-hosted, via Ollama's own
 #                             # OpenAI-compatible API) — set SEG_CONTENT_PROVIDER=ollama,

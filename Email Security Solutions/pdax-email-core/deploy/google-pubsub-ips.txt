@@ -1,0 +1,78 @@
+# Google Cloud IP ranges for Pub/Sub push subscriptions.
+# Use these to restrict the receiver ALB security group — only Google's IPs
+# should be able to POST to /pubsub.
+#
+# Source: https://www.gstatic.com/ipranges/cloud.json
+# Last updated: 2026-08-26
+#
+# IMPORTANT: Refresh this list quarterly. Google updates it regularly.
+# Refresh script:
+#   curl -s https://www.gstatic.com/ipranges/cloud.json \
+#     | python3 -c "import json,sys; [print(p['ipv4Prefix']) for p in json.load(sys.stdin)['prefixes'] if 'ipv4Prefix' in p]" \
+#     > deploy/google-pubsub-ips.txt
+#
+# To apply to the AWS security group (replace sg-XXXXX with your receiver ALB SG ID):
+#   while IFS= read -r cidr; do
+#     [[ "$cidr" =~ ^# || -z "$cidr" ]] && continue
+#     aws ec2 authorize-security-group-ingress --group-id sg-XXXXX \
+#       --protocol tcp --port 443 --cidr "$cidr" 2>/dev/null || true
+#   done < deploy/google-pubsub-ips.txt
+#
+# In practice, AWS security groups are capped at 60 inbound rules per group.
+# Use multiple security groups or AWS WAF IP sets for the full list.
+# WAF approach (recommended):
+#   1. Create a WAF Web ACL on the receiver ALB
+#   2. Add an IP set rule from this list
+#   3. Default action: BLOCK (only the IP set is allowed)
+
+34.1.208.0/20
+34.35.0.0/16
+34.80.0.0/15
+34.87.0.0/16
+34.96.0.0/14
+34.100.0.0/16
+34.101.0.0/16
+34.102.0.0/16
+34.104.0.0/14
+34.116.0.0/14
+34.120.0.0/14
+34.124.0.0/14
+34.128.0.0/10
+34.152.0.0/14
+34.156.0.0/15
+34.175.0.0/16
+34.177.0.0/16
+34.183.0.0/16
+34.192.0.0/12
+35.185.0.0/16
+35.186.0.0/16
+35.187.0.0/16
+35.188.0.0/16
+35.189.0.0/17
+35.190.0.0/17
+35.191.0.0/16
+35.192.0.0/14
+35.196.0.0/15
+35.198.0.0/16
+35.199.0.0/16
+35.200.0.0/14
+35.204.0.0/15
+35.206.0.0/16
+35.207.0.0/16
+35.208.0.0/12
+35.220.0.0/14
+35.224.0.0/12
+35.240.0.0/13
+104.154.0.0/15
+104.196.0.0/14
+104.155.0.0/16
+130.211.0.0/22
+142.250.0.0/15
+146.148.0.0/17
+162.216.148.0/22
+162.222.176.0/21
+173.255.112.0/20
+192.158.28.0/22
+199.192.112.0/22
+199.223.232.0/21
+208.68.108.0/22

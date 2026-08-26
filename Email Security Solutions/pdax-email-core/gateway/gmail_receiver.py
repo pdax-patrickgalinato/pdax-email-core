@@ -42,6 +42,7 @@ import base64
 import json
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -188,8 +189,27 @@ def renew_watch(user_email: str) -> dict:
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Renew Gmail watch subscriptions on startup.
+
+    Watches expire after ~7 days. Renewing on every startup means a weekly
+    deploy cadence is sufficient — no separate cron job required. Failures are
+    logged but never crash startup so the receiver stays available.
+    """
+    if _USERS and _TOPIC:
+        for user in _USERS:
+            try:
+                renew_watch(user)
+                print(f"[gmail_receiver] watch renewed for {user}", file=sys.stderr)
+            except Exception as exc:
+                print(f"[gmail_receiver] watch renewal FAILED for {user}: {exc}", file=sys.stderr)
+    yield
+
+
 app = FastAPI(
     title="SEGS Gmail API Receiver",
+    lifespan=_lifespan,
     docs_url=None,
     redoc_url=None,
     openapi_url=None,

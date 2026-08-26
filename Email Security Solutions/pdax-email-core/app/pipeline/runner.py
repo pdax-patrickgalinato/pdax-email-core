@@ -8,9 +8,10 @@ import os
 from pathlib import Path
 import yaml
 
-from ..models import PipelineResult, StageResult, StageStatus, Verdict
+from ..models import PipelineResult, StageResult, StageStatus, Verdict, Disposition
 from ..parsed_email import ParsedEmail
 from .. import disposition as disposition_mod
+from .. import lists as lists_mod
 from . import headers, sender, urls, attachments, content_ai, intel, verdict, deception
 from . import correlation as correlation_mod
 from . import detection_rules as detection_rules_mod
@@ -186,4 +187,36 @@ def run_pipeline(raw: bytes, source: str = "file",
     # Post-verdict only: map CLEAN/LOW/SUSPICIOUS/MALICIOUS → gateway action.
     # Does not change the verdict; AI never writes disposition.
     disposition_mod.apply_disposition(result)
+
+    # Allowlist / blocklist hard overrides — checked after scoring so audit log
+    # retains the real risk score alongside the override reason.
+    _apply_list_overrides(result, pe)
+
     return result
+
+
+def _apply_list_overrides(result: PipelineResult, pe: "ParsedEmail") -> None:
+    sender_addr = (pe.from_addr or "").lower().strip()
+    sender_domain = sender_addr.split("@", 1)[-1] if "@" in sender_addr else ""
+
+    def _matches(entry: dict) -> bool:
+        if "address" in entry:
+            return entry["address"].lower().strip() == sender_addr
+        if "domain" in entry:
+            d = entry["domain"].lower().strip().lstrip("@")
+            return sender_domain == d or sender_domain.endswith("." + d)
+        return False
+
+    for entry in lists_mod.load_blocklist():
+        if _matches(entry):
+            result.hard_override = "blocklist"
+            result.disposition = Disposition.QUARANTINE
+            result.disposition_reason = f"Sender on blocklist: {entry.get('note') or entry.get('address') or entry.get('domain', '')}"
+            return
+
+    for entry in lists_mod.load_allowlist():
+        if _matches(entry):
+            result.hard_override = "allowlist"
+            result.disposition = Disposition.DELIVER
+            result.disposition_reason = f"Sender on allowlist: {entry.get('note') or entry.get('address') or entry.get('domain', '')}"
+            return

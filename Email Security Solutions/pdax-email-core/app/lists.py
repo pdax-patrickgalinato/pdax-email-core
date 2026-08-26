@@ -64,6 +64,44 @@ def trusted_platforms() -> list[dict]:
     return out
 
 
+def _load_list_file(path: Path) -> list[dict]:
+    """Load an allowlist/blocklist YAML; return entries list (empty on error)."""
+    try:
+        if not path.is_file():
+            return []
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return [e for e in (data.get("entries") or []) if isinstance(e, dict)]
+    except Exception:
+        return []
+
+
+def load_allowlist() -> list[dict]:
+    """Return current allowlist entries (not cached — reads fresh per call)."""
+    return _load_list_file(_RULES_DIR / "allowlist.yaml")
+
+
+def load_blocklist() -> list[dict]:
+    """Return current blocklist entries (not cached — reads fresh per call)."""
+    return _load_list_file(_RULES_DIR / "blocklist.yaml")
+
+
+def _save_list_file(path: Path, entries: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    import re
+    name = path.stem  # "allowlist" or "blocklist"
+    header = (
+        f"# SEGS {name.capitalize()} — written by the dashboard API.\n"
+        f"# Changes take effect on the next email processed (no restart needed).\n"
+    )
+    lines = [header, "entries:"]
+    for e in entries:
+        lines.append(f"  - address: {e['address']!r}" if "address" in e
+                     else f"  - domain: {e['domain']!r}")
+        if e.get("note"):
+            lines.append(f"    note: {e['note']!r}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def clear_lists_cache() -> None:
     """Test helper — reload after monkeypatching rules paths (if ever needed)."""
     freemail_domains.cache_clear()

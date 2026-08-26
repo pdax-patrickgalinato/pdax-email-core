@@ -1,0 +1,9 @@
+# SEGS Blocklist — senders / domains that are always quarantined regardless of score.
+# Addresses take precedence over domain entries.
+# Changes here take effect on the next email processed (no restart needed).
+entries: []
+# Example entries:
+#   - address: spammer@evil.com
+#     note: "Known phishing sender"
+#   - domain: malicious-domain.xyz
+#     note: "Flagged by threat intel"

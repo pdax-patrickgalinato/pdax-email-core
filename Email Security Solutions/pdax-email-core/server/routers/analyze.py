@@ -7,6 +7,7 @@ this router is the only dashboard path that spends LLM tokens.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from email.utils import parseaddr
 from pathlib import Path
@@ -235,14 +236,17 @@ async def analyze_eml(
         )
 
     t0 = time.perf_counter()
+    corr = get_correlation_store()
     try:
-        pipeline, pipeline_result = _pipeline_summary(raw, filename, correlation_store=get_correlation_store())
+        pipeline, pipeline_result = await asyncio.to_thread(
+            _pipeline_summary, raw, filename, corr)
     except Exception:
         raise HTTPException(status_code=500, detail="Analysis failed — check server logs") from None
 
     try:
         # Import lazily so missing optional deps don't break feed/auth boot.
-        from eml_analysis_agent import analyze_eml_bytes, resolve_glm_credentials_path
+        from eml_analysis_agent import (
+            AnalysisError, analyze_eml_bytes, resolve_glm_credentials_path)
 
         creds = resolve_glm_credentials_path()
         if not creds.is_file():
@@ -251,13 +255,20 @@ async def analyze_eml(
                 detail="GLM credentials not configured — set SEG_GLM_CREDENTIALS_PATH "
                        "or place credentials.json in the project root",
             )
-        deep = analyze_eml_bytes(raw, filename, credentials_path=str(creds))
+        # analyze_eml_bytes is a blocking GLM call that can take minutes —
+        # run it in a thread so the async event loop stays free for other requests.
+        deep = await asyncio.to_thread(
+            analyze_eml_bytes, raw, filename, credentials_path=str(creds))
     except HTTPException:
         raise
-    except FileNotFoundError:
-        raise HTTPException(status_code=503, detail="Deep analysis service unavailable") from None
-    except Exception:
-        raise HTTPException(status_code=502, detail="Deep analysis failed — check server logs") from None
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="Deep analysis service unavailable") from exc
+    except AnalysisError as exc:
+        # LLM exhausted all retries — return a 422 with the specific reason
+        # (token budget, empty response, etc.) so the dashboard can display it.
+        raise HTTPException(status_code=422, detail=f"Analysis incomplete: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Deep analysis failed — check server logs") from exc
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
     segs = (pipeline or {}).get("verdict")

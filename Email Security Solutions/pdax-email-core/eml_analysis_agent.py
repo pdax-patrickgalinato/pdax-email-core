@@ -325,21 +325,30 @@ def build_user_message(parsed: dict) -> str:
     )
 
 
-# GLM-4.7 on Vertex is a reasoning model: completion budget is shared with
-# hidden chain-of-thought. The MSOC schema (landing/sender/investigation/
-# actions) needs more headroom than the original 6000 default — otherwise
-# finish_reason=length with empty content. Cap avoids runaway cost.
-_DEFAULT_MAX_TOKENS = 12000
-_MAX_TOKENS_CAP = 24000
+# GLM 5.x / Kimi K3 are reasoning models: completion budget is shared with a
+# hidden chain-of-thought that typically consumes 10–20k tokens before the
+# JSON answer appears. _DEFAULT_MAX_TOKENS is the starting budget; on each
+# finish_reason=length hit the budget doubles up to _MAX_TOKENS_CAP.
+# Previous values (12k/24k) were too low for GLM 5.2 and caused systematic
+# "empty content" failures — raised to give three doubling cycles.
+_DEFAULT_MAX_TOKENS = 20000
+_MAX_TOKENS_CAP = 40000
+
+
+class AnalysisError(RuntimeError):
+    """Raised when the agent fails to produce a valid analysis after all
+    retries. Carries a human-readable reason so callers can surface it
+    cleanly rather than returning a generic 502."""
 
 
 def call_agent(client, model_id: str, max_tokens: int, user_message: str) -> dict:
-    """Call GLM with JSON-object mode; retry on truncated or invalid output.
+    """Call the LLM with JSON-object mode; retry on truncated or invalid output.
 
-    On finish_reason=length (reasoning burned the budget before JSON), bump
-    max_tokens and retry with a clean message list — do not append empty
-    assistant turns. On parse failure, one repair prompt (same contract as
-    GLMProvider.analyze()).
+    On finish_reason=length (reasoning burned the budget before JSON output),
+    doubles the budget and retries with a clean message — up to 3 doubling
+    cycles (20k→40k). On JSON parse failure, attempts partial recovery from
+    truncated text before falling back to a repair prompt. Raises AnalysisError
+    on total failure so callers can surface a meaningful error message.
     """
     budget = max(512, int(max_tokens or _DEFAULT_MAX_TOKENS))
     base_messages = [
@@ -349,7 +358,7 @@ def call_agent(client, model_id: str, max_tokens: int, user_message: str) -> dic
     messages = list(base_messages)
     last_error: Optional[Exception] = None
     length_retries = 0
-    for attempt in range(4):
+    for attempt in range(5):
         response = client.chat.completions.create(
             model=model_id, messages=messages, temperature=0,
             max_tokens=budget, response_format={"type": "json_object"},
@@ -360,12 +369,12 @@ def call_agent(client, model_id: str, max_tokens: int, user_message: str) -> dic
         if not text:
             last_error = ValueError(
                 f"empty content (finish_reason={finish or '?'})")
-            if finish == "length" and length_retries < 2 and budget < _MAX_TOKENS_CAP:
+            if finish == "length" and length_retries < 3 and budget < _MAX_TOKENS_CAP:
                 length_retries += 1
-                budget = min(_MAX_TOKENS_CAP, max(budget * 2, 16000))
+                budget = min(_MAX_TOKENS_CAP, max(budget * 2, 24000))
                 messages = list(base_messages)  # clean slate — nothing to repair
                 continue
-            if attempt >= 3:
+            if attempt >= 4:
                 break
             messages = list(base_messages)
             messages.append({"role": "user", "content":
@@ -377,18 +386,26 @@ def call_agent(client, model_id: str, max_tokens: int, user_message: str) -> dic
         except ValueError as e:
             last_error = e
             # Truncated mid-JSON: prefer more tokens over a repair of partial junk.
-            if finish == "length" and length_retries < 2 and budget < _MAX_TOKENS_CAP:
+            if finish == "length" and length_retries < 3 and budget < _MAX_TOKENS_CAP:
                 length_retries += 1
-                budget = min(_MAX_TOKENS_CAP, max(budget * 2, 16000))
+                budget = min(_MAX_TOKENS_CAP, max(budget * 2, 24000))
                 messages = list(base_messages)
                 continue
+            # Partial-JSON recovery: if the text ends mid-object, try trimming
+            # to the last complete closing brace before attempting a repair.
+            last_brace = text.rfind("}")
+            if last_brace > 0:
+                try:
+                    return json.loads(text[: last_brace + 1])
+                except ValueError:
+                    pass
             messages.append({"role": "assistant", "content": text})
             messages.append({"role": "user", "content":
                 f"Your last response was not valid JSON matching the required schema "
                 f"({last_error}). Respond again with ONLY the JSON object, no prose."})
-    raise ValueError(
-        f"agent did not return valid JSON after retry: {last_error} "
-        f"(last max_tokens={budget}; GLM reasoning models need a generous budget)")
+    raise AnalysisError(
+        f"agent did not return valid JSON after {attempt + 1} attempts: {last_error} "
+        f"(last max_tokens={budget}; reasoning models need a generous token budget)")
 
 
 # The MaaS gateway's JSON-object mode doesn't guarantee field-level schema

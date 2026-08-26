@@ -28,6 +28,6 @@ categories:
   web_reputation:
     enabled: true
   virtual_analyzer:
-    enabled: false
+    enabled: true
   correlated_intelligence:
     enabled: true

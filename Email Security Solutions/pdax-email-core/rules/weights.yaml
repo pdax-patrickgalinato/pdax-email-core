@@ -16,6 +16,14 @@ thresholds:
   suspicious: 45
   low: 20
 
+# AI decision as an upward-only verdict floor (see app/pipeline/verdict.py):
+# when the content-AI stage classifies a threat with confidence >= this value,
+# the verdict is floored up to SUSPICIOUS (quarantine). Upward-only — never
+# lowers a verdict, never reaches MALICIOUS on the AI's word alone. Runtime
+# override: env SEG_AI_VERDICT_FLOOR_CONF. Start high (0.8), lower as trust grows.
+ai_influence:
+  verdict_floor_confidence: 0.8
+
 # app/attachment_forensics.py's static_severity -> points added to the
 # attachments stage's sub_score (Malware Scanning, TMES policy parity).
 # CRITICAL isn't emitted by _severity() today (max is HIGH) — kept for

@@ -56,10 +56,49 @@ def _iter_eml(path: Path):
     raise FileNotFoundError(f"not a file or directory of .eml: {path}")
 
 
+from app.models import Verdict  # noqa: E402
+
+# Verdicts that trigger the Tier-2 deep forensic pass (eml_analysis_agent).
+_DEEP_ANALYSIS_VERDICTS = (Verdict.SUSPICIOUS, Verdict.MALICIOUS)
+
+
+def _maybe_deep_analyze(raw: bytes, filename: str, result) -> None:
+    """Tier 2: on flagged mail only, auto-run the deep forensic agent and
+    attach its report to `result.deep_analysis` so it is persisted with the
+    quarantine/shadow record. Heavy + LLM-backed, so it is gated on verdict to
+    bound cost and wrapped so a failure can never break enforcement — clean
+    mail is untouched, and any error degrades to a status marker."""
+    if result.verdict not in _DEEP_ANALYSIS_VERDICTS:
+        return
+    try:
+        # Lazy import: keeps the optional deep-analysis deps out of the normal
+        # consumer path and mirrors server/routers/analyze.py's usage.
+        from eml_analysis_agent import analyze_eml_bytes, resolve_glm_credentials_path
+        creds = resolve_glm_credentials_path()
+        if not creds.is_file():
+            result.deep_analysis = {"status": "unavailable",
+                                    "reason": "GLM credentials not configured"}
+            return
+        deep = analyze_eml_bytes(raw, filename, credentials_path=str(creds))
+        result.deep_analysis = {
+            "status": "ok",
+            "markdown": deep.get("markdown"),
+            "analysis": deep.get("analysis"),
+            "playbook": deep.get("playbook"),
+            "model": deep.get("model"),
+        }
+    except Exception as e:  # never let the heavy agent break enforcement
+        result.deep_analysis = {"status": "unavailable",
+                                "reason": f"{type(e).__name__}: {e}"}
+
+
 def process_one(eml_path: Path, client, print_report: bool = True) -> dict:
     raw = eml_path.read_bytes()
     result = run_pipeline(raw, source="smtp_hold")
     queue_id = eml_path.stem or result.message_id or eml_path.name
+    # Tier 2 — deep forensic pass on flagged mail, before enforcement writes
+    # the record, so the deep report is persisted alongside the verdict.
+    _maybe_deep_analyze(raw, eml_path.name, result)
     applied = client.apply(queue_id, raw, result)
     summary = {
         "file": str(eml_path),
@@ -71,6 +110,9 @@ def process_one(eml_path: Path, client, print_report: bool = True) -> dict:
         "enforce_mode": result.enforce_mode.value,
         "enforcement_applied": applied,
         "hard_override": result.hard_override,
+        "threat_class": result.threat_class,
+        "threat_confidence": result.threat_confidence,
+        "deep_analysis": (result.deep_analysis or {}).get("status") if result.deep_analysis else None,
         "message_id": result.message_id,
         "subject": result.subject,
     }

@@ -21,6 +21,24 @@ _DEFAULT_PATH = Path(__file__).resolve().parent.parent / "data" / "activity_audi
 _lock = threading.Lock()
 _MAX_READ = 2000  # newest-first cap for API responses
 
+# Field-length caps — bound each stored string so an attacker-influenced value
+# (e.g. a crafted email sender name that ends up as `actor`) can't bloat the log
+# file or smuggle megabytes of payload into an append-only audit record.
+_MAX_ACTOR_LEN = 256
+_MAX_DETAIL_LEN = 2048
+_MAX_ACTION_LEN = 64
+
+
+def _clip(value: Any, limit: int) -> str:
+    """Coerce to str and truncate to `limit` chars. Strips control characters
+    (newlines, etc.) so a value can't forge extra JSONL lines or corrupt the
+    single-line-per-record invariant the reader relies on."""
+    s = str(value)
+    s = s.replace("\r", " ").replace("\n", " ").replace("\x00", "")
+    if len(s) > limit:
+        s = s[: limit - 1] + "…"  # ellipsis marks truncation
+    return s
+
 # action -> (ui type for icon, human title prefix)
 _ACTION_META = {
     "setup": ("accent", "First-run setup"),
@@ -56,10 +74,10 @@ def record(
     entry = {
         "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "ts_epoch": time.time(),
-        "action": action,
-        "actor": actor or "(anonymous)",
-        "actor_role": actor_role or "",
-        "detail": detail or "",
+        "action": _clip(action, _MAX_ACTION_LEN),
+        "actor": _clip(actor or "(anonymous)", _MAX_ACTOR_LEN),
+        "actor_role": _clip(actor_role or "", 32),
+        "detail": _clip(detail or "", _MAX_DETAIL_LEN),
         "meta": meta or {},
     }
     try:

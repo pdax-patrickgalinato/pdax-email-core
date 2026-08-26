@@ -19,3 +19,6 @@ gateway/spool/hold/
 # (app/pipeline/intel.py, app/pipeline/correlation.py). Regenerated locally,
 # never shared/committed.
 data/
+
+# Claude Code internal files — plans, memory, worktree metadata.
+.claude/

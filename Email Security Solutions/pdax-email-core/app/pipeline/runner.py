@@ -63,6 +63,7 @@ def run_pipeline(raw: bytes, source: str = "file",
     weights = weights_cfg["weights"]
     thresholds = weights_cfg["thresholds"]
     severity_points = weights_cfg.get("forensics_severity_points")
+    ai_floor_conf = (weights_cfg.get("ai_influence") or {}).get("verdict_floor_confidence")
 
     requested_provider = content_provider or content_ai.get_default_provider()
     ic = intel_client or intel.get_default_intel_client()
@@ -141,7 +142,7 @@ def run_pipeline(raw: bytes, source: str = "file",
         c = safe("content_ai", content_ai.run, pe, content_ai.HeuristicProvider(), content_context)
         result.stages = [h, s, u, d, a, c, i]
         result.iocs = verdict.extract_iocs(pe, result.stages)
-        verdict.score_and_verdict(result, weights, thresholds, policy_cfg)
+        verdict.score_and_verdict(result, weights, thresholds, policy_cfg, ai_floor_conf)
 
         if _should_escalate(result, thresholds, triage_margin):
             # Pass 2: only the genuinely ambiguous middle spends a real call.
@@ -154,7 +155,7 @@ def run_pipeline(raw: bytes, source: str = "file",
 
     result.stages = [h, s, u, d, a, c, i]
     result.iocs = verdict.extract_iocs(pe, result.stages)
-    verdict.score_and_verdict(result, weights, thresholds, policy_cfg)
+    verdict.score_and_verdict(result, weights, thresholds, policy_cfg, ai_floor_conf)
 
     # Behavioral correlation write-back (see correlation.py) — called for ALL
     # emails so the behavioral baselines reflect the full mail flow, not only

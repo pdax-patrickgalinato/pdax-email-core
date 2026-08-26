@@ -5,10 +5,23 @@ it cannot set the verdict directly. Hard overrides handle the high-confidence
 cases that should bypass weighting entirely."""
 from __future__ import annotations
 
+import os
 import re
 
 from ..models import IOCSet, PipelineResult, StageResult, Verdict
 from . import policy
+
+# Minimum AI intent-confidence for the content stage's threat classification to
+# floor the verdict up to SUSPICIOUS (see the end of score_and_verdict).
+# Upward-only, so a fooled LLM can only over-quarantine, never wave a threat
+# past the gate. Start high; tune down as trust in the classifier grows.
+_AI_VERDICT_FLOOR_CONF_DEFAULT = 0.8
+
+# The verdict floor is only driven by a genuine LLM's decision — not the
+# offline regex HeuristicProvider (whose "confidence" is a fixed heuristic, not
+# a calibrated judgment) nor the NullProvider. This keeps heuristic-only runs
+# behaviourally unchanged and makes the floor mean "a real model decided this."
+_AI_LLM_PROVIDERS = frozenset({"bedrock", "gemini", "glm", "ollama"})
 
 _URL_HOST = re.compile(r"^https?://([^/]+)", re.I)
 
@@ -69,10 +82,22 @@ def extract_iocs(pe, stages: list[StageResult]) -> IOCSet:
 
 
 def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict,
-                      policy_cfg: dict = None) -> None:
+                      policy_cfg: dict = None, ai_floor_conf: float = None) -> None:
     result.thresholds = dict(thresholds)   # carried through so reports can show margin-to-next-verdict
     stage_by_name = {s.stage: s for s in result.stages}
     suppressed_all: list = []
+
+    # Multi-threat classification from the AI content stage — recorded on the
+    # result up front so it survives every return path below (including the
+    # hard-override early returns), giving analysts the attack class the AI
+    # assigned regardless of how the verdict was reached.
+    content_stage = stage_by_name.get("content_ai")
+    if content_stage and isinstance(content_stage.facts, dict):
+        result.threat_class = content_stage.facts.get("nlu_intent") or "none"
+        try:
+            result.threat_confidence = float(content_stage.facts.get("nlu_confidence") or 0.0)
+        except (TypeError, ValueError):
+            result.threat_confidence = 0.0
 
     # --- hard overrides (bypass weighted scoring) -----------------------
     # Correlated Intelligence — only a real external hit (VirusTotal/
@@ -224,3 +249,32 @@ def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict,
         result.verdict = Verdict.LOW
     else:
         result.verdict = Verdict.CLEAN
+
+    # AI decision as an upward-only verdict floor: a high-confidence threat
+    # classification from the content stage guarantees at least SUSPICIOUS
+    # (quarantine), even when the weighted math landed lower. This makes the
+    # AI's *decision* (its classification, not just its number) a direct factor
+    # in the final verdict — but strictly upward: it never lowers a verdict and
+    # never reaches MALICIOUS/reject on the model's word alone, so a fooled LLM
+    # can only over-quarantine, never let a threat through. Hard overrides
+    # returned earlier and are unaffected.
+    _content_provider = (content_stage.facts.get("provider")
+                         if content_stage and isinstance(content_stage.facts, dict) else None)
+    if (result.threat_class and result.threat_class != "none"
+            and _content_provider in _AI_LLM_PROVIDERS):
+        # Precedence: env override > rules/weights.yaml (ai_floor_conf) > default.
+        try:
+            env_floor = os.environ.get("SEG_AI_VERDICT_FLOOR_CONF")
+            if env_floor is not None:
+                floor_conf = float(env_floor)
+            elif ai_floor_conf is not None:
+                floor_conf = float(ai_floor_conf)
+            else:
+                floor_conf = _AI_VERDICT_FLOOR_CONF_DEFAULT
+        except (TypeError, ValueError):
+            floor_conf = _AI_VERDICT_FLOOR_CONF_DEFAULT
+        if (result.threat_confidence >= floor_conf
+                and result.verdict in (Verdict.CLEAN, Verdict.LOW)):
+            result.verdict = Verdict.SUSPICIOUS
+            result.reasons.append(
+                f"ai_verdict_floor:{result.threat_class}:{result.threat_confidence:.2f}")

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.parsed_email import ParsedEmail
 from app.pipeline import policy, sender
-from app.rdap_client import domain_age_days, domain_rdap_summary
+from app.rdap_client import _sanitize_domain, domain_age_days, domain_rdap_summary
 
 
 def _rdap_response(days_ago, event_action="registration"):
@@ -78,6 +78,55 @@ def test_domain_rdap_summary_includes_registrar_and_age():
 
 def test_domain_rdap_summary_degrades_on_404():
     assert domain_rdap_summary("missing.example", http_get=lambda url: (404, None)) is None
+
+
+# --- domain sanitization (SSRF / URL-injection defense) ----------------------
+
+def test_sanitize_domain_accepts_valid():
+    assert _sanitize_domain("example.com") == "example.com"
+    assert _sanitize_domain("SUB.Domain.CO.UK.") == "sub.domain.co.uk"
+
+
+def test_sanitize_domain_rejects_url_injection():
+    # Characters that could alter the RDAP request path or target host must be
+    # rejected before the value is placed into the outbound URL.
+    for bad in [
+        "evil.com/../admin",
+        "evil.com?redir=1",
+        "evil.com#frag",
+        "evil.com@169.254.169.254",   # userinfo@host — would retarget the request
+        "evil.com:8080",
+        "evil.com/",
+        "evil com",
+        "localhost",                  # single label, no TLD
+        "a..b.com",                   # empty label
+        "-bad.com",                   # label starts with hyphen
+        "",
+    ]:
+        assert _sanitize_domain(bad) is None, f"should reject {bad!r}"
+
+
+def test_sanitize_domain_blocks_injected_domain_from_reaching_http_get():
+    # A crafted "domain" must never reach the HTTP layer at all.
+    calls = []
+
+    def spy(url):
+        calls.append(url)
+        return 200, {}
+
+    assert domain_rdap_summary("evil.com/../secret", http_get=spy) is None
+    assert calls == [], "sanitizer must short-circuit before any HTTP call"
+
+
+def test_sanitize_domain_url_has_no_traversal_when_valid():
+    seen = {}
+
+    def capture(url):
+        seen["url"] = url
+        return _rdap_response(50)
+
+    domain_rdap_summary("good.example", http_get=capture)
+    assert seen["url"] == "https://rdap.org/domain/good.example"
 
 
 # --- sender.py wiring ---------------------------------------------------------

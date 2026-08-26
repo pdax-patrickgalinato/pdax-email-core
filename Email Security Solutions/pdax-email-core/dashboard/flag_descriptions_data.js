@@ -50,7 +50,27 @@ window.SEG_FLAG_DESCRIPTIONS = {
     "forensics_high_entropy_content": "Attachment content has unusually high byte entropy for its apparent type — consistent with packed/encrypted/obfuscated payloads.",
     "forensics_possible_zip_bomb": "Attachment archive's compression ratio or uncompressed size exceeds safe bounds — consistent with a decompression-bomb resource-exhaustion attempt.",
     "forensics_encrypted_archive": "Attachment archive has password-protected/encrypted members — a known technique for hiding malicious content from automated scanning.",
-    "forensics_executable_content": "Attachment's actual content is executable code, regardless of its declared file type."
+    "forensics_executable_content": "Attachment's actual content is executable code, regardless of its declared file type.",
+    "missing_message_id": "Message-ID header is absent — legitimate mail servers always generate one; its absence is a sign of script-generated or spoofed mail.",
+    "missing_mime_version": "MIME-Version header is absent — most modern email clients include it; its absence is a marginal signal associated with spam and scripted senders.",
+    "date_anomaly_future": "The email's Date header shows a timestamp more than 2 days in the future — consistent with forged or tampered headers.",
+    "date_anomaly_stale": "The email's Date header is over 30 days in the past — either an unusually delayed message or a forged timestamp.",
+    "suspicious_x_mailer": "The X-Mailer or User-Agent header identifies a bulk/scripted mail tool (PHPMailer, libwww-perl, etc.) — commonly used to automate spam and phishing campaigns.",
+    "display_name_domain_impersonation": "The sender's display name contains a domain that doesn't match the actual sending domain — e.g. 'PayPal <attacker@evil.com>' — a classic phishing display-name spoof.",
+    "tracking_beacon_detected": "The email loads external images or resources automatically on open — consistent with a tracking pixel that confirms email delivery and may capture the reader's IP address.",
+    "url_ftp_scheme": "A URL in this email uses the FTP scheme — very rarely used in legitimate email; may indicate a link to a malicious file server.",
+    "oletools_vba_macro_detected": "A VBA macro was detected in the attachment by oletools static analysis — macros can execute arbitrary code when the document is opened.",
+    "oletools_autoexec_or_shell": "The attachment's VBA macro contains auto-execution triggers or shell commands (AutoExec, Shell, WScript) — high-confidence malicious macro indicator.",
+    "nlu_intent:bec": "NLU classifier identified the intent as Business Email Compromise — financial diversion, gift-card request, or wire-transfer ask.",
+    "nlu_intent:callback_scam": "NLU classifier identified the intent as a callback scam — fake subscription charge or invoice asking the recipient to call a phone number.",
+    "nlu_intent:credential_theft": "NLU classifier identified the intent as credential theft — login, password reset, or account-verification phishing.",
+    "nlu_intent:extortion": "NLU classifier identified the intent as extortion — threats to expose compromising material unless cryptocurrency is paid.",
+    "nlu_intent:steal_pii": "NLU classifier identified the intent as PII harvesting — requests for SSN, passport, bank account, or other sensitive personal data.",
+    "nlu_intent:job_scam": "NLU classifier identified the intent as a job scam — fake work-from-home or remote-position offer, typically used for advance-fee or PII theft.",
+    "nlu_intent:malware_delivery": "NLU classifier identified the intent as malware delivery — the message exists to get the recipient to open an attachment or link that drops/runs code.",
+    "nlu_intent:ransomware": "NLU classifier identified the intent as ransomware — a ransomware delivery lure or an extortion/ransom demand referencing encrypted files.",
+    "nlu_intent:reconnaissance": "NLU classifier identified the intent as reconnaissance — probing or target-profiling (test message, 'are you there', validity check) ahead of a follow-up attack.",
+    "first_time_sender": "This sender address has never been seen before in the past 6 months — new senders combined with suspicious content are a key BEC and phishing indicator."
   },
   "prefix": {
     "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
@@ -68,7 +88,17 @@ window.SEG_FLAG_DESCRIPTIONS = {
     "spoofed_attachment_type": "An attachment's actual file type (from its content, not its name) doesn't match its declared extension: {value} — a classic disguised-executable trick.",
     "double_extension_executable": "Attachment filename hides an executable behind a benign-looking extension (e.g. invoice.pdf.exe): {value}",
     "service_abuse": "Trusted-platform service abuse ({value}): authentic channel mail pushing a foreign brand lure.",
-    "correlation_seen_before": "One of this email's indicators (indicator:count = {value}) was already seen in a prior SUSPICIOUS/MALICIOUS verdict from this pipeline's own history.",
-    "domain_age_low": "The sender's domain was registered only {value} day(s) ago — newly-registered domains are common phishing infrastructure."
+    "behavioral_sender_ip_drift": "Sender '{value}' has been observed using multiple originating IPs over the past 6 months — consistent with account compromise or a lookalike sender rotating infrastructure.",
+    "behavioral_ip_many_senders": "Originating IP '{value}' has sent mail from 5 or more distinct sender addresses — consistent with a shared attack platform.",
+    "behavioral_ip_shortener": "Originating IP '{value}' has previously sent emails containing link-shortener URLs — consistent with a link obfuscation campaign.",
+    "behavioral_shared_shortener": "Link shortener domain '{value}' was also used by different sender addresses — strong indicator of a coordinated phishing campaign.",
+    "url_link_shortener": "A link in this email uses the known link-shortener service '{value}' — shorteners hide the real destination.",
+    "domain_age_low": "The sender's domain was registered only {value} day(s) ago — newly-registered domains are common phishing infrastructure.",
+    "received_hop_delay": "An unusually long delay ({value}) between mail relay hops — may indicate routing through a compromised proxy or timestamp manipulation.",
+    "url_tracking_beacon": "External resource '{value}' is embedded as a tracking image/pixel that loads automatically when the email is opened.",
+    "vt_domain_suspicious": "Domain '{value}' has a suspicious VirusTotal reputation score or category flag.",
+    "vt_url_submitted": "URL '{value}' was not found in VirusTotal's database and has been submitted for scanning — re-check later for results.",
+    "rare_sender": "This sender has only been seen {value} time(s) in the past 6 months — low volume senders warrant additional scrutiny when paired with suspicious content.",
+    "ai_verdict_floor": "The AI threat classifier was confident enough ({value}) that this message was raised to at least SUSPICIOUS (quarantine) regardless of the numeric score."
   }
 };

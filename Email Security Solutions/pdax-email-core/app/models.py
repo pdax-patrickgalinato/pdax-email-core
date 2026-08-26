@@ -105,6 +105,20 @@ class PipelineResult(BaseModel):
     # {"id": str, "name": str, "description": str, "severity": str, "tags": list}
     matched_rules: list[dict] = Field(default_factory=list)
 
+    # Multi-threat classification from the AI content stage (nlu_intent): the
+    # attack class this email belongs to — phishing/credential_theft, bec,
+    # malware_delivery, ransomware, extortion, callback_scam, steal_pii,
+    # reconnaissance, job_scam, or "none". Advisory label surfaced to analysts;
+    # a high-confidence value can also floor the verdict up (see verdict.py).
+    threat_class: str = "none"
+    threat_confidence: float = 0.0
+
+    # Tier-2 deep forensic report (eml_analysis_agent), auto-attached by the
+    # gateway consumer only for flagged mail (SUSPICIOUS/MALICIOUS). None when
+    # not run (clean mail) or unavailable. Shape: {status, markdown, analysis,
+    # playbook} — see gateway/hold_consumer.py.
+    deep_analysis: Optional[dict] = None
+
     # Post-verdict enforcement intent (filled by disposition.apply after scoring).
     disposition: Disposition = Disposition.DELIVER
     disposition_reason: str = ""

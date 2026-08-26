@@ -93,6 +93,9 @@ _FLAG_DESCRIPTIONS = {
     "nlu_intent:extortion": "NLU classifier identified the intent as extortion — threats to expose compromising material unless cryptocurrency is paid.",
     "nlu_intent:steal_pii": "NLU classifier identified the intent as PII harvesting — requests for SSN, passport, bank account, or other sensitive personal data.",
     "nlu_intent:job_scam": "NLU classifier identified the intent as a job scam — fake work-from-home or remote-position offer, typically used for advance-fee or PII theft.",
+    "nlu_intent:malware_delivery": "NLU classifier identified the intent as malware delivery — the message exists to get the recipient to open an attachment or link that drops/runs code.",
+    "nlu_intent:ransomware": "NLU classifier identified the intent as ransomware — a ransomware delivery lure or an extortion/ransom demand referencing encrypted files.",
+    "nlu_intent:reconnaissance": "NLU classifier identified the intent as reconnaissance — probing or target-profiling (test message, 'are you there', validity check) ahead of a follow-up attack.",
     # Sender history
     "first_time_sender": "This sender address has never been seen before in the past 6 months — new senders combined with suspicious content are a key BEC and phishing indicator.",
 }
@@ -123,6 +126,7 @@ _FLAG_PREFIX_DESCRIPTIONS = {
     "vt_domain_suspicious": "Domain '{value}' has a suspicious VirusTotal reputation score or category flag.",
     "vt_url_submitted": "URL '{value}' was not found in VirusTotal's database and has been submitted for scanning — re-check later for results.",
     "rare_sender": "This sender has only been seen {value} time(s) in the past 6 months — low volume senders warrant additional scrutiny when paired with suspicious content.",
+    "ai_verdict_floor": "The AI threat classifier was confident enough ({value}) that this message was raised to at least SUSPICIOUS (quarantine) regardless of the numeric score.",
 }
 
 
@@ -392,6 +396,11 @@ def text_report(r: PipelineResult) -> str:
         f"**Disposition:** {r.disposition.value}  ",
         f"**Enforcement Mode:** {r.enforce_mode.value}  ",
     ]
+    if r.threat_class and r.threat_class != "none":
+        _tc_label = r.threat_class.replace("_", " ").title()
+        lines.append(
+            f"**Threat Class (AI):** {_tc_label} "
+            f"(confidence {r.threat_confidence:.0%})  ")
     if r.disposition_reason:
         lines.append(f"**Disposition Reason:** {r.disposition_reason}  ")
     if r.enforcement_applied:

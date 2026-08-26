@@ -23,13 +23,38 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
 _RDAP_BASE = "https://rdap.org/domain/"
 _TIMEOUT_SECONDS = 6
+
+# A hostname the RDAP path segment is allowed to contain: DNS labels only.
+# Rejects anything that could alter the request target or path — '/', '?',
+# '#', '@', ':', whitespace, or other URL-significant characters — before the
+# value (which originates from an untrusted email sender domain) is placed
+# into the outbound URL. Defence-in-depth against request-splitting / SSRF.
+_VALID_DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$")
+
+
+def _sanitize_domain(domain: str) -> Optional[str]:
+    """Return a lowercased, validated domain safe to embed in the RDAP URL,
+    or None if the input isn't a well-formed DNS name. IDNs are punycode-
+    encoded so only ASCII reaches the URL."""
+    if not domain:
+        return None
+    d = domain.strip().rstrip(".").lower()
+    try:
+        d = d.encode("idna").decode("ascii")  # normalise unicode/IDN homographs
+    except (UnicodeError, ValueError):
+        return None
+    if not _VALID_DOMAIN_RE.match(d):
+        return None
+    return d
 
 
 def rdap_lookup_enabled() -> bool:
@@ -97,11 +122,14 @@ def domain_rdap_summary(domain: str, http_get=None) -> Optional[dict]:
     Fields: domain, age_days, registered (ISO date or ""), registrar, status
     (list of status strings). Never raises.
     """
-    if not domain:
+    safe_domain = _sanitize_domain(domain)
+    if not safe_domain:
         return None
     http_get = http_get or _default_http_get
     try:
-        status_code, data = http_get(_RDAP_BASE + domain)
+        # quote() as a second belt-and-braces layer even though the regex
+        # already forbids URL-significant characters.
+        status_code, data = http_get(_RDAP_BASE + urllib.parse.quote(safe_domain))
     except Exception:
         return None
     if status_code != 200 or not data or not isinstance(data, dict):
@@ -114,7 +142,7 @@ def domain_rdap_summary(domain: str, http_get=None) -> Optional[dict]:
         elif isinstance(s, list) and s:
             statuses.append(str(s[0]))
     return {
-        "domain": domain.lower().rstrip("."),
+        "domain": safe_domain,
         "age_days": age,
         "registered": registered.date().isoformat() if registered else "",
         "registrar": _registrar_name(data),

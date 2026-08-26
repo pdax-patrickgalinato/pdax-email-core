@@ -25,7 +25,7 @@ from ..deps import require_role
 
 router = APIRouter(prefix="/api")
 
-_ENFORCE_FILE = Path(__file__).resolve().parents[3] / "rules" / "enforcement_mode.yaml"
+_ENFORCE_FILE = Path(__file__).resolve().parents[2] / "rules" / "enforcement_mode.yaml"
 _VALID_MODES = ("shadow", "quarantine", "reject")
 
 

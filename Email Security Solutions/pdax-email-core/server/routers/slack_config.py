@@ -19,7 +19,7 @@ from ..deps import require_role
 
 router = APIRouter(prefix="/api")
 
-_CONFIG_FILE = Path(__file__).resolve().parents[3] / "rules" / "slack_config.yaml"
+_CONFIG_FILE = Path(__file__).resolve().parents[2] / "rules" / "slack_config.yaml"
 _VALID_THRESHOLDS = ("SUSPICIOUS", "MALICIOUS")
 
 

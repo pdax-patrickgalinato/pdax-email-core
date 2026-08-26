@@ -18,7 +18,7 @@ from app import lists as lists_mod
 
 router = APIRouter(prefix="/api")
 
-_RULES_DIR = Path(__file__).resolve().parents[3] / "rules"
+_RULES_DIR = Path(__file__).resolve().parents[2] / "rules"
 
 
 class ListEntry(BaseModel):

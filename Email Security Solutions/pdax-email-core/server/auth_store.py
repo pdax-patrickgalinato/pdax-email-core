@@ -16,6 +16,7 @@ DELETE.
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import sqlite3
 import time
@@ -78,6 +79,20 @@ class AuthStore:
 
     # --- passwords ---------------------------------------------------------
     @staticmethod
+    def _validate_password_complexity(pw: str) -> None:
+        """Raise ValueError describing the first failing complexity rule."""
+        if len(pw) < 8:
+            raise ValueError("Password must be at least 8 characters.")
+        if not re.search(r"[A-Z]", pw):
+            raise ValueError("Password must contain at least one uppercase letter (A–Z).")
+        if not re.search(r"[a-z]", pw):
+            raise ValueError("Password must contain at least one lowercase letter (a–z).")
+        if not re.search(r"\d", pw):
+            raise ValueError("Password must contain at least one number (0–9).")
+        if not re.search(r"[^A-Za-z0-9]", pw):
+            raise ValueError("Password must contain at least one special character (!@#$%^&* …).")
+
+    @staticmethod
     def _hash_password(password: str, salt: bytes) -> str:
         return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt,
                                    _PBKDF2_ITERATIONS).hex()
@@ -93,6 +108,7 @@ class AuthStore:
     def create_user(self, username: str, password: str, role: str) -> User:
         if role not in ROLES:
             raise ValueError(f"invalid role: {role!r}")
+        self._validate_password_complexity(password)
         salt = secrets.token_bytes(16)
         password_hash = self._hash_password(password, salt)
         conn = self._connect()
@@ -128,8 +144,7 @@ class AuthStore:
 
     def set_password(self, user_id: int, new_password: str) -> None:
         """Admin password reset — also used to rotate a user's credential."""
-        if len(new_password) < 8:
-            raise ValueError("password must be at least 8 characters")
+        self._validate_password_complexity(new_password)
         salt = secrets.token_bytes(16)
         password_hash = self._hash_password(new_password, salt)
         conn = self._connect()

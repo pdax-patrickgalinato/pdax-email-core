@@ -53,6 +53,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from app.pipeline.runner import run_pipeline  # noqa: E402
 from app.report import send_slack_alert  # noqa: E402
+from app.notify import send_quarantine_notification  # noqa: E402
 
 # ── config ────────────────────────────────────────────────────────────────────
 _CREDS_PATH = os.environ.get("SEG_GMAIL_CREDENTIALS", str(_REPO_ROOT / "credentials.json"))
@@ -134,8 +135,9 @@ def scan_message(user_email: str, message_id: str) -> dict:
         ).execute()
         action = "labeled-review"
 
-    # Slack alert
+    # Slack alert + quarantine receiver notification
     _maybe_slack_alert(result)
+    send_quarantine_notification(raw, result)
 
     return {
         "message_id": message_id,

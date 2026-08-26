@@ -42,6 +42,7 @@ from app.disposition import (  # noqa: E402
 )
 from app.pipeline.runner import run_pipeline  # noqa: E402
 from app.report import text_report, audit_record, send_slack_alert  # noqa: E402
+from app.notify import send_quarantine_notification  # noqa: E402
 
 _RULES_DIR = Path(__file__).resolve().parents[1] / "rules"
 
@@ -125,6 +126,7 @@ def process_one(eml_path: Path, client, print_report: bool = True) -> dict:
     _maybe_deep_analyze(raw, eml_path.name, result)
     applied = client.apply(queue_id, raw, result)
     _maybe_slack_alert(result)
+    send_quarantine_notification(raw, result)
     summary = {
         "file": str(eml_path),
         "queue_id": queue_id,

@@ -584,6 +584,14 @@
     background: var(--status-critical-bg); color: var(--status-critical); font-size: 13px;
   }
   .users-error.show { display: block; }
+  .pw-modal-fields { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+  .pw-modal-fields label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-muted); }
+  .pw-modal-fields input { appearance: none; height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 500; width: 100%; box-sizing: border-box; }
+  #pwChecklist { list-style: none; padding: 0; margin: 14px 0 4px; display: flex; flex-direction: column; gap: 5px; }
+  .pwck-item { font-size: 12px; color: var(--ink-muted); padding-left: 20px; position: relative; }
+  .pwck-item::before { content: "✗"; position: absolute; left: 0; color: var(--status-critical); font-weight: 700; }
+  .pwck-item.pass { color: var(--status-good); }
+  .pwck-item.pass::before { content: "✓"; color: var(--status-good); }
   .drawer-field { margin-bottom: 14px; }
   .df-label { display: block; font-size: 11px; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
   .df-value { font-size: 13px; }
@@ -1140,6 +1148,56 @@
           </form>
         </div>
 
+        <!-- Quarantine receiver notification (admin only) -->
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Quarantine notification</h2>
+              <div class="card-sub">Send an email to the original recipient when their email is quarantined or blocked.</div>
+            </div>
+            <span class="enforce-badge" id="notifyBadge" style="background:var(--status-neutral);color:var(--ink);">Disabled</span>
+          </div>
+          <form id="notifyConfigForm" style="display:flex;flex-direction:column;gap:12px;max-width:520px;" autocomplete="off">
+            <div style="display:grid;grid-template-columns:1fr 100px;gap:10px;">
+              <label style="font-size:13px;font-weight:500;">
+                SMTP host
+                <input id="notifySmtpHost" class="search-input" style="width:100%;margin-top:4px;" type="text" placeholder="smtp.pdax.ph" autocomplete="off" />
+              </label>
+              <label style="font-size:13px;font-weight:500;">
+                Port
+                <input id="notifySmtpPort" class="search-input" style="width:100%;margin-top:4px;" type="number" value="587" min="1" max="65535" />
+              </label>
+            </div>
+            <label style="font-size:13px;font-weight:500;">
+              SMTP username
+              <input id="notifySmtpUser" class="search-input" style="width:100%;margin-top:4px;" type="text" placeholder="segs-alerts@pdax.ph" autocomplete="off" />
+            </label>
+            <label style="font-size:13px;font-weight:500;">
+              From address
+              <input id="notifyFromAddr" class="search-input" style="width:100%;margin-top:4px;" type="email" placeholder="segs-alerts@pdax.ph" />
+            </label>
+            <div style="font-size:12px;color:var(--ink-muted);padding:8px 10px;border-radius:var(--radius-sm);background:var(--surface-2);border:1px solid var(--border);">
+              SMTP password is set via the <code>SEGS_NOTIFY_SMTP_PASS</code> environment variable and is never stored in the UI.
+              <span id="notifyPassSet" style="margin-left:6px;font-weight:600;"></span>
+            </div>
+            <label style="font-size:13px;font-weight:500;">
+              Alert threshold
+              <select id="notifyThreshold" class="search-input" style="width:180px;margin-top:4px;">
+                <option value="SUSPICIOUS">Suspicious &amp; above</option>
+                <option value="MALICIOUS">Malicious only</option>
+              </select>
+            </label>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" id="notifyEnabled" />
+                Enable receiver notifications
+              </label>
+              <button type="submit" class="btn btn-sm" id="notifySaveBtn">Save</button>
+            </div>
+            <div id="notifyMsg" style="font-size:12.5px;color:var(--status-ok);min-height:18px;"></div>
+          </form>
+        </div>
+
       </section>
 
       <!-- ============================== PAGE: AUDIT LOG ============================== -->
@@ -1224,6 +1282,35 @@
       <button class="btn btn-sm" id="behavioralModalClose" style="flex-shrink:0;">&#x2715;</button>
     </div>
     <div id="behavioralModalList" style="margin-top:14px;max-height:380px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- ============================== PASSWORD CHANGE MODAL ============================== -->
+<div class="modal-overlay" id="pwModalOverlay">
+  <div class="modal" style="width:min(420px,100%);">
+    <h3>Set password — <span id="pwModalUsername" style="color:var(--accent)"></span></h3>
+    <div class="pw-modal-fields">
+      <label>
+        New password
+        <input type="password" id="pwModalNew" autocomplete="new-password" placeholder="Enter new password" />
+      </label>
+      <label>
+        Confirm password
+        <input type="password" id="pwModalConfirm" autocomplete="new-password" placeholder="Repeat new password" />
+      </label>
+    </div>
+    <ul id="pwChecklist">
+      <li class="pwck-item" id="pwck-len">At least 8 characters</li>
+      <li class="pwck-item" id="pwck-upper">One uppercase letter (A–Z)</li>
+      <li class="pwck-item" id="pwck-lower">One lowercase letter (a–z)</li>
+      <li class="pwck-item" id="pwck-digit">One number (0–9)</li>
+      <li class="pwck-item" id="pwck-special">One special character (!@#$%^&amp;* …)</li>
+    </ul>
+    <div id="pwModalError" class="users-error" style="margin-top:8px;"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-sm" id="pwModalCancel" type="button">Cancel</button>
+      <button class="btn btn-sm btn-primary" id="pwModalSubmit" type="button" disabled>Set password</button>
+    </div>
   </div>
 </div>
 
@@ -2667,46 +2754,11 @@
         '<td><div class="users-actions">' + pwBtn + delBtn + "</div></td>" +
         "</tr>";
     }).join("");
-    Array.prototype.forEach.call(body.querySelectorAll("[data-user-pw]"), function (btn) {
-      btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-user-pw");
-        var name = btn.getAttribute("data-user-name") || id;
-        var pw = window.prompt("New password for “" + name + "” (min 8 characters):");
-        if (pw === null) return;
-        if (pw.length < 8) {
-          showUsersError("Password must be at least 8 characters.");
-          return;
-        }
-        var again = window.prompt("Confirm new password for “" + name + "”:");
-        if (again === null) return;
-        if (pw !== again) {
-          showUsersError("Passwords do not match.");
-          return;
-        }
-        showUsersError("");
-        fetch("/api/users/" + encodeURIComponent(id) + "/password", {
-          method: "POST", credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password: pw })
-        }).then(function (r) {
-          return r.json().then(function (j) {
-            if (!r.ok) {
-              var detail = j && j.detail;
-              if (Array.isArray(detail)) detail = detail.map(function (d) { return d.msg || JSON.stringify(d); }).join("; ");
-              throw new Error(detail || ("Password reset failed (" + r.status + ")"));
-            }
-            return j;
-          }, function () {
-            if (!r.ok) throw new Error("Password reset failed (" + r.status + ")");
-            return {};
-          });
-        }).then(function () {
-          toast(ICON.good, "Password updated for " + name);
-          // Their sessions were revoked server-side; refresh audit so the event shows up.
-          loadFeed();
-        }).catch(function (err) {
-          showUsersError(err.message || String(err));
-        });
+    Array.prototype.forEach.call(body.querySelectorAll(“[data-user-pw]”), function (btn) {
+      btn.addEventListener(“click”, function () {
+        var id = btn.getAttribute(“data-user-pw”);
+        var name = btn.getAttribute(“data-user-name”) || id;
+        openPwModal(id, name);
       });
     });
     Array.prototype.forEach.call(body.querySelectorAll("[data-user-del]"), function (btn) {
@@ -2895,6 +2947,58 @@
       document.getElementById("slackWebhookUrl").value = "";
       loadSlackConfig();
       toast(ICON.good, "Slack config saved");
+    }).catch(function (err) {
+      msg.style.color = "var(--status-critical)";
+      msg.textContent = err.message || String(err);
+    }).finally(function () { btn.disabled = false; });
+  });
+
+  // ===== NOTIFY CONFIG =====
+  function loadNotifyConfig() {
+    if (!isAdmin()) return;
+    fetch("/api/notify-config", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (cfg) {
+        document.getElementById("notifyEnabled").checked = !!cfg.enabled;
+        document.getElementById("notifySmtpHost").value = cfg.smtp_host || "";
+        document.getElementById("notifySmtpPort").value = cfg.smtp_port || 587;
+        document.getElementById("notifySmtpUser").value = cfg.smtp_user || "";
+        document.getElementById("notifyFromAddr").value = cfg.from_addr || "";
+        document.getElementById("notifyThreshold").value = cfg.threshold || "SUSPICIOUS";
+        var passSet = document.getElementById("notifyPassSet");
+        if (passSet) passSet.textContent = cfg.smtp_pass_set ? "✓ Password set" : "✗ Password not set";
+        var badge = document.getElementById("notifyBadge");
+        if (badge) {
+          badge.textContent = cfg.enabled ? "Enabled" : "Disabled";
+          badge.style.background = cfg.enabled ? "var(--status-ok)" : "var(--status-neutral)";
+          badge.style.color = cfg.enabled ? "#fff" : "var(--ink)";
+        }
+      }).catch(function () {});
+  }
+
+  document.getElementById("notifyConfigForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var btn = document.getElementById("notifySaveBtn");
+    btn.disabled = true;
+    var msg = document.getElementById("notifyMsg");
+    msg.textContent = "";
+    fetch("/api/notify-config", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: document.getElementById("notifyEnabled").checked,
+        smtp_host: document.getElementById("notifySmtpHost").value.trim(),
+        smtp_port: parseInt(document.getElementById("notifySmtpPort").value, 10) || 587,
+        smtp_user: document.getElementById("notifySmtpUser").value.trim(),
+        from_addr: document.getElementById("notifyFromAddr").value.trim(),
+        threshold: document.getElementById("notifyThreshold").value
+      })
+    }).then(function (r) {
+      if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || r.status); });
+      msg.textContent = "Saved.";
+      loadNotifyConfig();
+      toast(ICON.good, "Notification config saved");
     }).catch(function (err) {
       msg.style.color = "var(--status-critical)";
       msg.textContent = err.message || String(err);
@@ -3209,6 +3313,112 @@
   });
   // ---- end behavioral modal ----
 
+  /* ============================== PASSWORD CHANGE MODAL ============================== */
+  (function () {
+    var overlay = document.getElementById("pwModalOverlay");
+    var usernameSpan = document.getElementById("pwModalUsername");
+    var newInput = document.getElementById("pwModalNew");
+    var confirmInput = document.getElementById("pwModalConfirm");
+    var submitBtn = document.getElementById("pwModalSubmit");
+    var errorDiv = document.getElementById("pwModalError");
+    var targetId = null;
+
+    var checks = {
+      len:     function (v) { return v.length >= 8; },
+      upper:   function (v) { return /[A-Z]/.test(v); },
+      lower:   function (v) { return /[a-z]/.test(v); },
+      digit:   function (v) { return /\d/.test(v); },
+      special: function (v) { return /[^A-Za-z0-9]/.test(v); }
+    };
+
+    function showPwError(msg) {
+      errorDiv.textContent = msg;
+      errorDiv.classList.toggle("show", !!msg);
+    }
+
+    function validate() {
+      var val = newInput.value;
+      var allPass = true;
+      Object.keys(checks).forEach(function (k) {
+        var pass = checks[k](val);
+        document.getElementById("pwck-" + k).classList.toggle("pass", pass);
+        if (!pass) allPass = false;
+      });
+      var match = val && confirmInput.value === val;
+      submitBtn.disabled = !(allPass && match);
+      if (confirmInput.value && !match) {
+        showPwError("Passwords do not match.");
+      } else {
+        showPwError("");
+      }
+    }
+
+    window.openPwModal = function (id, name) {
+      targetId = id;
+      usernameSpan.textContent = name;
+      newInput.value = "";
+      confirmInput.value = "";
+      showPwError("");
+      Object.keys(checks).forEach(function (k) {
+        document.getElementById("pwck-" + k).classList.remove("pass");
+      });
+      submitBtn.disabled = true;
+      overlay.classList.add("show");
+      setTimeout(function () { newInput.focus(); }, 50);
+    };
+
+    function closePwModal() {
+      overlay.classList.remove("show");
+      newInput.value = "";
+      confirmInput.value = "";
+      showPwError("");
+    }
+
+    newInput.addEventListener("input", validate);
+    confirmInput.addEventListener("input", validate);
+
+    document.getElementById("pwModalCancel").addEventListener("click", closePwModal);
+    overlay.addEventListener("click", function (evt) { if (evt.target === overlay) closePwModal(); });
+    document.addEventListener("keydown", function (evt) {
+      if (evt.key === "Escape" && overlay.classList.contains("show")) closePwModal();
+    });
+
+    submitBtn.addEventListener("click", function () {
+      var pw = newInput.value;
+      if (!targetId || submitBtn.disabled) return;
+      showPwError("");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Saving…";
+      var name = usernameSpan.textContent;
+      fetch("/api/users/" + encodeURIComponent(targetId) + "/password", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw })
+      }).then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) {
+            var detail = j && j.detail;
+            if (Array.isArray(detail)) detail = detail.map(function (d) { return d.msg || JSON.stringify(d); }).join("; ");
+            throw new Error(detail || ("Password reset failed (" + r.status + ")"));
+          }
+          return j;
+        }, function () {
+          if (!r.ok) throw new Error("Password reset failed (" + r.status + ")");
+          return {};
+        });
+      }).then(function () {
+        closePwModal();
+        toast(ICON.good, "Password updated for " + name);
+        loadFeed();
+      }).catch(function (err) {
+        showPwError(err.message || String(err));
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Set password";
+      });
+    });
+  })();
+  /* ============================== end password modal ============================== */
+
   function runAnalyze() {
     if (!analyzeFile || !canAct()) return;
     var errEl = document.getElementById("analyzeError");
@@ -3336,7 +3546,7 @@
     });
     document.getElementById("pageTitle").textContent = PAGE_META[page][0];
     document.getElementById("pageSub").textContent = PAGE_META[page][1];
-    if (page === "settings") { loadEnforcement(); loadPolicy().then(renderPolicyPanel); if (admin) { loadUsers(); loadLists(); loadSlackConfig(); } }
+    if (page === "settings") { loadEnforcement(); loadPolicy().then(renderPolicyPanel); if (admin) { loadUsers(); loadLists(); loadSlackConfig(); loadNotifyConfig(); } }
   }
   Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (btn) {
     btn.addEventListener("click", function () { setPage(btn.dataset.page); });

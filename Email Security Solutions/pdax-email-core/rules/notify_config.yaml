@@ -1,0 +1,8 @@
+# SEGS quarantine receiver notification — written by PUT /api/notify-config.
+# SMTP password is read from SEGS_NOTIFY_SMTP_PASS env var (never stored here).
+enabled: false
+smtp_host: ""
+smtp_port: 587
+smtp_user: ""
+from_addr: "segs-alerts@pdax.ph"
+threshold: SUSPICIOUS

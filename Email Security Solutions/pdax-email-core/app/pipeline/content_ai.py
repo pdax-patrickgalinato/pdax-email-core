@@ -282,6 +282,16 @@ _KNOWN_FINDINGS = (
     "lure_scarcity_reward",
     "nlu_intent:bec", "nlu_intent:callback_scam", "nlu_intent:credential_theft",
     "nlu_intent:extortion", "nlu_intent:steal_pii", "nlu_intent:job_scam",
+    "nlu_intent:malware_delivery", "nlu_intent:ransomware",
+    "nlu_intent:reconnaissance",
+)
+
+# The full multi-threat intent taxonomy — email-borne attack classes SEGS
+# classifies (not phishing-only). Kept in one place so the tool schema, the
+# Gemini/GLM/Ollama JSON schemas, and any downstream mapping stay in sync.
+_THREAT_INTENTS = (
+    "bec", "callback_scam", "credential_theft", "extortion", "steal_pii",
+    "job_scam", "malware_delivery", "ransomware", "reconnaissance", "none",
 )
 
 _ORG = org_config.load_org_config()
@@ -290,7 +300,11 @@ _ORG = org_config.load_org_config()
 # regardless, so fall back to a generic one here without touching _ORG itself.
 _ORG_DISPLAY = _ORG["display_name"] or "this organization"
 
-_SYSTEM_PROMPT = """You are a phishing-content analyst for {org_display_name}, {org_regulator_context}. \
+_SYSTEM_PROMPT = """You are an email threat analyst for {org_display_name}, {org_regulator_context}. \
+Email is an entry point for many attack classes, not phishing alone — assess for \
+phishing/credential theft, business email compromise (BEC) and invoice/vendor fraud, \
+malware and ransomware delivery, extortion, callback/vishing scams, PII harvesting/\
+reconnaissance, and job scams. \
 You are given the subject and body text of one email, PLUS a \
 short summary of what other, already-deterministic stages of this pipeline \
 found (header/DKIM/SPF/DMARC authentication, sender-identity checks, URL/Web \
@@ -315,6 +329,11 @@ exact structured format required of you:
 3. Credential-harvesting language (login, verify, reset, "confirm your identity").
 4. Financial/BEC indicators (payment redirection, gift cards, wire transfers,
    invoice or vendor-change fraud, "are you available" pretexting).
+4b. Malware/ransomware-delivery pretext — does the wording exist to get the
+   recipient to open an attachment or click a link that drops/runs code
+   (fake invoice/receipt/resume/shipping doc, "enable content", password-
+   protected archive, "your files are encrypted"/ransom or extortion demands)?
+   Weigh this together with any attachment/URL findings in the summary below.
 5. Brand/organizational impersonation cues in the wording itself.
 6. Language/grammar anomalies inconsistent with the claimed sender's register.
 7. Filter-evasion structure: an oversized whitespace pad, or a real-looking
@@ -357,7 +376,8 @@ _TOOL_CONFIG = {
                 "properties": {
                     "score": {
                         "type": "number", "minimum": 0, "maximum": 100,
-                        "description": "0=benign content, 100=unambiguous phishing/BEC content.",
+                        "description": "0=benign content, 100=unambiguous malicious content "
+                                       "(phishing/BEC/malware/ransomware/extortion/scam).",
                     },
                     "findings": {
                         "type": "array", "items": {"type": "string"},
@@ -369,9 +389,15 @@ _TOOL_CONFIG = {
                     },
                     "nlu_intent": {
                         "type": "string",
-                        "enum": ["bec", "callback_scam", "credential_theft",
-                                 "extortion", "steal_pii", "job_scam", "none"],
-                        "description": "Primary threat intent of the email, or 'none' if clean/benign.",
+                        "enum": list(_THREAT_INTENTS),
+                        "description": (
+                            "Primary threat class of the email (multi-threat, not "
+                            "phishing-only): bec, callback_scam, credential_theft, "
+                            "extortion, steal_pii, job_scam, malware_delivery "
+                            "(malicious attachment/link dropper/loader), ransomware "
+                            "(ransomware lure or delivery), reconnaissance "
+                            "(probing/target profiling), or 'none' if clean/benign."
+                        ),
                     },
                     "nlu_confidence": {
                         "type": "number", "minimum": 0.0, "maximum": 1.0,
@@ -482,6 +508,8 @@ _GEMINI_RESPONSE_SCHEMA = {
         "score": {"type": "number", "minimum": 0, "maximum": 100},
         "findings": {"type": "array", "items": {"type": "string"}},
         "summary": {"type": "string"},
+        "nlu_intent": {"type": "string", "enum": list(_THREAT_INTENTS)},
+        "nlu_confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
     },
     "required": ["score", "findings", "summary"],
 }
@@ -789,7 +817,10 @@ class GLMProvider:
         import json as _json
 
         schema_hint = ('Respond with ONLY a JSON object matching this exact schema: '
-                        '{"score": <number 0-100>, "findings": [<string>, ...], "summary": "<string>"}')
+                        '{"score": <number 0-100>, "findings": [<string>, ...], "summary": "<string>", '
+                        '"nlu_intent": "<one of: bec, callback_scam, credential_theft, extortion, '
+                        'steal_pii, job_scam, malware_delivery, ransomware, reconnaissance, none>", '
+                        '"nlu_confidence": <number 0.0-1.0>}')
         user_text = (f"Subject: {subject or '(none)'}\n\nBody:\n{(body or '')[:8000]}\n\n"
                     f"Deterministic findings from other stages:\n{_summarize_context(context)}\n\n{schema_hint}")
         messages = [
@@ -909,7 +940,10 @@ class OllamaProvider:
         import json as _json
 
         schema_hint = ('Respond with ONLY a JSON object matching this exact schema: '
-                        '{"score": <number 0-100>, "findings": [<string>, ...], "summary": "<string>"}')
+                        '{"score": <number 0-100>, "findings": [<string>, ...], "summary": "<string>", '
+                        '"nlu_intent": "<one of: bec, callback_scam, credential_theft, extortion, '
+                        'steal_pii, job_scam, malware_delivery, ransomware, reconnaissance, none>", '
+                        '"nlu_confidence": <number 0.0-1.0>}')
         user_text = (f"Subject: {subject or '(none)'}\n\nBody:\n{(body or '')[:8000]}\n\n"
                     f"Deterministic findings from other stages:\n{_summarize_context(context)}\n\n{schema_hint}")
         messages = [
@@ -956,18 +990,68 @@ class OllamaProvider:
                               "error": f"{type(e).__name__}: {e}"}
 
 
+class FallbackProvider:
+    """Tries each provider in order; on any error, falls through to the next.
+
+    Preserves the winning provider's facts (model_id, nlu_intent, etc.) intact
+    so the verdict floor and report know exactly which model answered.
+    On total failure returns a degraded zero-score result like NullProvider.
+    """
+
+    def __init__(self, providers: list) -> None:
+        self._providers = providers
+
+    def analyze(self, subject, body, context):
+        import logging
+        _log = logging.getLogger(__name__)
+        last_exc = None
+        for provider in self._providers:
+            name = getattr(provider, "model_id", type(provider).__name__)
+            try:
+                score, findings, facts = provider.analyze(subject, body, context)
+                # Surface which slot in the chain actually answered.
+                facts.setdefault("fallback_used", name)
+                return score, findings, facts
+            except Exception as exc:
+                _log.warning("FallbackProvider: %s failed (%s), trying next", name, exc)
+                last_exc = exc
+        _log.error("FallbackProvider: all providers exhausted; last error: %s", last_exc)
+        return 0.0, [], {"provider": "null", "degraded": True,
+                         "degraded_reason": "all_providers_failed"}
+
+
 def get_default_provider() -> ContentProvider:
     """Selects the content provider from SEG_CONTENT_PROVIDER. Defaults to the
     offline HeuristicProvider so nothing calls out to AWS/Google/a local
     Ollama server unless explicitly configured — the same "gate behind a
-    flag, keep the offline default" posture as the rest of this pipeline."""
+    flag, keep the offline default" posture as the rest of this pipeline.
+
+    When SEG_CONTENT_PROVIDER=glm, returns a FallbackProvider chain:
+      1. GLM 5.2 (SEG_GLM_MODEL_ID, default zai-org/glm-5.2-maas)    — global
+      2. GLM 5   (SEG_GLM_FALLBACK1_MODEL_ID)                         — global
+      3. Kimi K3 (SEG_GLM_FALLBACK2_MODEL_ID, moonshotai/kimi-k3-maas)— global
+      4. Gemini 2.5 Flash (SEG_GLM_FALLBACK3_MODEL_ID)                — us-central1
+      5. HeuristicProvider                                             — offline last resort
+    All four Vertex AI slots share the same service-account credentials.
+    """
     choice = os.environ.get("SEG_CONTENT_PROVIDER", "heuristic").strip().lower()
     if choice == "bedrock":
         return BedrockProvider()
     if choice == "gemini":
         return GeminiProvider()
     if choice == "glm":
-        return GLMProvider()
+        fallback1_id  = os.environ.get("SEG_GLM_FALLBACK1_MODEL_ID", "zai-org/glm-5-maas")
+        fallback2_id  = os.environ.get("SEG_GLM_FALLBACK2_MODEL_ID", "moonshotai/kimi-k3-maas")
+        fallback2_loc = os.environ.get("SEG_GLM_FALLBACK2_LOCATION", "global")
+        fallback3_id  = os.environ.get("SEG_GLM_FALLBACK3_MODEL_ID", "google/gemini-2.5-flash")
+        fallback3_loc = os.environ.get("SEG_GLM_FALLBACK3_LOCATION", "us-central1")
+        return FallbackProvider([
+            GLMProvider(),                                               # slot 1: primary (SEG_GLM_MODEL_ID)
+            GLMProvider(model_id=fallback1_id),                         # slot 2: GLM 5
+            GLMProvider(model_id=fallback2_id, location=fallback2_loc), # slot 3: Kimi K3
+            GLMProvider(model_id=fallback3_id, location=fallback3_loc), # slot 4: Gemini 2.5 Flash
+            HeuristicProvider(),                                         # slot 5: offline last resort
+        ])
     if choice == "ollama":
         return OllamaProvider()
     if choice == "null":

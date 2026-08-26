@@ -221,10 +221,19 @@ def test_service_account_token_provider_refreshes_when_expired():
 
 def test_get_default_provider_respects_env():
     import os
+    from app.pipeline.content_ai import FallbackProvider
     old = os.environ.get("SEG_CONTENT_PROVIDER")
     try:
         os.environ["SEG_CONTENT_PROVIDER"] = "glm"
-        assert isinstance(get_default_provider(), GLMProvider)
+        # When GLM is configured, get_default_provider() returns a FallbackProvider
+        # whose primary slot is GLMProvider (with up to 4 fallbacks + HeuristicProvider).
+        p = get_default_provider()
+        assert isinstance(p, FallbackProvider), (
+            f"Expected FallbackProvider when SEG_CONTENT_PROVIDER=glm, got {type(p)}"
+        )
+        assert any(isinstance(slot, GLMProvider) for slot in p._providers), (
+            "FallbackProvider must have at least one GLMProvider slot"
+        )
     finally:
         if old is None:
             os.environ.pop("SEG_CONTENT_PROVIDER", None)

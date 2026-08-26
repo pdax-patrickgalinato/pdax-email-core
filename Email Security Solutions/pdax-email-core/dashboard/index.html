@@ -665,6 +665,52 @@
   .beh-email-from { font-weight: 500; font-size: 12.5px; }
   .beh-email-id { color: var(--ink-muted); font-family: monospace; font-size: 11px; }
   .beh-email-date { color: var(--ink-muted); }
+
+  /* ===== ENFORCEMENT MODE PANEL ===== */
+  .enforce-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .enforce-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .enforce-badge.mode-shadow   { background: var(--surface-2); color: var(--ink-secondary); border: 1.5px solid var(--border); }
+  .enforce-badge.mode-quarantine { background: #fff3cd; color: #92600a; border: 1.5px solid #f0c040; }
+  .enforce-badge.mode-reject   { background: #ffe0e0; color: #b91c1c; border: 1.5px solid #f87171; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .enforce-badge.mode-quarantine { background: #3b2800; color: #fbbf24; border-color: #92600a; }
+    :root:not([data-theme="light"]) .enforce-badge.mode-reject { background: #3b0000; color: #fca5a5; border-color: #b91c1c; }
+  }
+  :root[data-theme="dark"] .enforce-badge.mode-quarantine { background: #3b2800; color: #fbbf24; border-color: #92600a; }
+  :root[data-theme="dark"] .enforce-badge.mode-reject { background: #3b0000; color: #fca5a5; border-color: #b91c1c; }
+  .enforce-seg {
+    display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; background: var(--surface-2);
+  }
+  .enforce-seg button {
+    padding: 7px 16px; font-size: 13px; font-weight: 500; font-family: inherit;
+    background: transparent; border: none; border-right: 1px solid var(--border);
+    color: var(--ink-secondary); cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .enforce-seg button:last-child { border-right: none; }
+  .enforce-seg button:hover:not([aria-pressed="true"]) { background: var(--border); color: var(--ink); }
+  .enforce-seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: default; }
+  .enforce-seg button[aria-pressed="true"].mode-quarantine { background: #f59e0b; color: #fff; }
+  .enforce-seg button[aria-pressed="true"].mode-reject { background: #dc2626; color: #fff; }
+  .enforce-meta { font-size: 12px; color: var(--ink-muted); margin-top: 10px; }
+  /* Enforcement confirm modal */
+  #enforceModal { display: none; position: fixed; inset: 0; z-index: 1200; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); }
+  #enforceModal.open { display: flex; }
+  .enforce-dialog {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); padding: 28px 28px 22px; max-width: 400px; width: 90%;
+  }
+  .enforce-dialog h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .enforce-dialog p { font-size: 13px; color: var(--ink-secondary); line-height: 1.55; margin-bottom: 20px; }
+  .enforce-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .enforce-dialog-actions button { padding: 7px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; border: 1px solid var(--border); }
+  .enforce-btn-cancel { background: var(--surface-2); color: var(--ink); }
+  .enforce-btn-confirm { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .enforce-btn-confirm.is-quarantine { background: #f59e0b; border-color: #f59e0b; }
 </style>
 </head>
 <body class="auth-pending">
@@ -727,6 +773,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
         Users
       </button>
+      <button class="nav-item" data-page="settings" id="navSettings" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </button>
     </nav>
     <div class="header-right">
       <div class="live-badge"><span class="live-dot"></span><span id="liveLabel">Live · updated just now</span></div>
@@ -760,16 +810,6 @@
       <!-- ============================== PAGE: OVERVIEW ============================== -->
       <section class="page active" id="page-overview">
         <div class="stat-grid" id="statGrid"></div>
-
-        <div class="card">
-          <div class="card-head">
-            <div>
-              <h2>Protection policy</h2>
-              <div class="card-sub">Category toggles mirroring the Email Security Module's General policy — sourced from rules/policy.yaml</div>
-            </div>
-          </div>
-          <div class="policy-grid" id="policyGrid"></div>
-        </div>
 
         <div class="charts-row">
           <div class="card">
@@ -947,6 +987,48 @@
         </div>
       </section>
 
+      <!-- ============================== PAGE: SETTINGS (admin only) ============================== -->
+      <section class="page" id="page-settings">
+
+        <!-- Gateway enforcement — admin only -->
+        <div class="card enforce-card is-admin" id="enforcementCard">
+          <div class="enforce-header">
+            <div>
+              <h2 style="font-size:16px;font-weight:600;letter-spacing:-0.02em;">Gateway enforcement</h2>
+              <div class="card-sub">Detection &amp; monitoring always run regardless of mode — only the blocking action changes. Keep on <strong>Monitor only</strong> during your testing phase.</div>
+            </div>
+            <span class="enforce-badge mode-shadow" id="enforceBadge">Monitor only</span>
+          </div>
+          <div style="margin-bottom:12px;">
+            <div class="enforce-seg" role="group" aria-label="Select enforcement mode">
+              <button data-mode="shadow"     class="mode-shadow"     aria-pressed="true">Monitor only</button>
+              <button data-mode="quarantine" class="mode-quarantine"  aria-pressed="false">Quarantine</button>
+              <button data-mode="reject"     class="mode-reject"      aria-pressed="false">Reject</button>
+            </div>
+          </div>
+          <div class="enforce-meta" id="enforceMeta"></div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+            <p style="font-size:12.5px;color:var(--ink-secondary);line-height:1.6;margin:0;">
+              <strong>Monitor only (shadow)</strong> — every email is scored, logged, and shown here. Nothing is blocked or held. Recommended for live testing.<br>
+              <strong>Quarantine</strong> — suspicious and malicious mail is held in the spool; legitimate mail still delivers normally.<br>
+              <strong>Reject</strong> — malicious mail is hard-rejected at the gateway. Enable only after validating detection quality in shadow mode.
+            </p>
+          </div>
+        </div>
+
+        <!-- Protection policy -->
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Protection policy</h2>
+              <div class="card-sub">Category toggles — enable or disable entire detection families. Changes take effect on the next email processed.</div>
+            </div>
+          </div>
+          <div class="policy-grid" id="policyGrid"></div>
+        </div>
+
+      </section>
+
       <!-- ============================== PAGE: AUDIT LOG ============================== -->
       <section class="page" id="page-audit">
         <div class="toolbar">
@@ -1029,6 +1111,18 @@
     <div class="modal-actions">
       <button class="btn btn-sm" id="modalCancel">Cancel</button>
       <button class="btn btn-sm btn-primary" id="modalConfirm">Release</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== ENFORCEMENT MODE CONFIRM MODAL ============================== -->
+<div id="enforceModal" role="dialog" aria-modal="true" aria-labelledby="enforceModalTitle">
+  <div class="enforce-dialog">
+    <h3 id="enforceModalTitle">Enable blocking?</h3>
+    <p id="enforceModalBody">Switching from monitor-only to a blocking mode will affect live mail delivery. Make sure you've validated detection quality first.</p>
+    <div class="enforce-dialog-actions">
+      <button class="enforce-btn-cancel" id="enforceModalCancel">Cancel</button>
+      <button class="enforce-btn-confirm" id="enforceModalConfirm">Confirm</button>
     </div>
   </div>
 </div>
@@ -1719,7 +1813,7 @@
       var tag = e.wazuh ? "Wazuh" : (e.tag || TYPE_LABEL[e.type] || "Event");
       return '<div class="log-entry">' +
         '<div class="log-time">' + fmtDateTime(e.ts) + "</div>" +
-        '<div class="log-icon t-' + e.type + '">' + ICON[iconKey] + "</div>" +
+        '<div class="log-icon t-' + escapeHtml(e.type) + '">' + ICON[iconKey] + "</div>" +
         '<div class="log-body"><div class="log-title">' + escapeHtml(e.title) + '</div><div class="log-detail">' + escapeHtml(e.detail) + "</div></div>" +
         '<div class="log-tag' + (e.wazuh ? " wazuh" : "") + (e.kind === "activity" ? " activity" : "") + '">' + escapeHtml(tag) + "</div>" +
         "</div>";
@@ -1820,6 +1914,12 @@
         ? '<div style="margin-top:6px;">' + '<div class="override-banner">' + ICON.critical + "<span><strong>Hard override: " + e.hardOverride + ".</strong> " + escapeHtml(describeFlag(e.hardOverride)) + "</span></div></div>"
         : '<div class="df-value" style="margin-top:4px; color:var(--ink-muted); font-size:12px;">' + escapeHtml(verdictMargin(e.verdict, e.score)) + "</div>") +
       "</div>";
+    if (e.threatClass && e.threatClass !== "none") {
+      var tcLabel = String(e.threatClass).replace(/_/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      var tcConf = (typeof e.threatConfidence === "number") ? " (" + Math.round(e.threatConfidence * 100) + "% confidence)" : "";
+      html += '<div class="drawer-field"><span class="df-label">Threat Class (AI)</span>' +
+        '<span class="df-value"><strong>' + escapeHtml(tcLabel) + "</strong>" + escapeHtml(tcConf) + "</span></div>";
+    }
     html += '<div class="drawer-field"><span class="df-label">From</span><span class="df-value mono">' + escapeHtml(e.fromName) + " &lt;" + escapeHtml(e.fromAddr) + "&gt;</span></div>";
     html += '<div class="drawer-field"><span class="df-label">Received</span><span class="df-value mono">' + fmtDateTime(e.ts) + "</span></div>";
     html += '<div class="drawer-field"><span class="df-label">Message ID</span><span class="df-value mono">' + escapeHtml(e.id) + "@pdax-email-core</span></div>";
@@ -1894,7 +1994,7 @@
           var domain = p[1] || "", count = p[2] || "?";
           return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(128,128,128,.15);font-size:12px;">' +
             '<span><strong>Shortener domain:</strong> <code style="font-size:11px;background:rgba(0,0,0,.18);padding:1px 5px;border-radius:3px;">' + escapeHtml(domain) + '</code></span>' +
-            '<span style="opacity:.65;font-size:11px;">\xd7' + count + ' other sender' + (Number(count) === 1 ? "" : "s") + '</span>' +
+            '<span style="opacity:.65;font-size:11px;">\xd7' + escapeHtml(String(count)) + ' other sender' + (Number(count) === 1 ? "" : "s") + '</span>' +
             '</div>';
         }).join("");
         html += '<div class="drawer-field"><div style="padding:10px 12px;border-radius:8px;background:var(--status-critical-bg);color:var(--status-critical);">' +
@@ -2315,7 +2415,113 @@
     document.getElementById("userChipRole").textContent = u.role || "—";
     var navUsers = document.getElementById("navUsers");
     if (navUsers) navUsers.hidden = !isAdmin();
+    var navSettings = document.getElementById("navSettings");
+    if (navSettings) navSettings.hidden = !isAdmin();
   }
+
+  // ===== ENFORCEMENT MODE =====
+  var _enforcePending = null;
+
+  var ENFORCE_LABELS = { shadow: "Monitor only", quarantine: "Quarantine", reject: "Reject" };
+  var ENFORCE_BADGE_CLS = { shadow: "mode-shadow", quarantine: "mode-quarantine", reject: "mode-reject" };
+
+  function renderEnforcement(data) {
+    var mode = (data && data.mode) || "shadow";
+    var badge = document.getElementById("enforceBadge");
+    var meta  = document.getElementById("enforceMeta");
+    if (!badge) return;
+    badge.textContent = ENFORCE_LABELS[mode] || mode;
+    badge.className = "enforce-badge " + (ENFORCE_BADGE_CLS[mode] || "mode-shadow");
+    var btns = document.querySelectorAll(".enforce-seg button[data-mode]");
+    for (var i = 0; i < btns.length; i++) {
+      var pressed = btns[i].dataset.mode === mode;
+      btns[i].setAttribute("aria-pressed", pressed ? "true" : "false");
+    }
+    if (meta) {
+      var by = data && data.updated_by ? data.updated_by : "";
+      var at = data && data.updated_at ? data.updated_at : "";
+      if (by && at) {
+        try { at = new Date(at).toLocaleString(); } catch (e) {}
+        meta.textContent = "Last changed by " + by + " on " + at;
+      } else {
+        meta.textContent = mode === "shadow" ? "Default: detection and monitoring only. No mail is blocked." : "";
+      }
+    }
+  }
+
+  function loadEnforcement() {
+    if (!isAdmin()) return Promise.resolve();
+    return fetch("/api/enforcement", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) renderEnforcement(d); })
+      .catch(function () {});
+  }
+
+  function applyEnforcement(mode) {
+    return fetch("/api/enforcement", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: mode })
+    }).then(function (r) {
+      if (!r.ok) return r.json().then(function (e) { throw new Error(e.detail || r.status); });
+      return r.json();
+    }).then(function (d) {
+      renderEnforcement(d);
+      toast(ICON.good, "Enforcement set to: " + (ENFORCE_LABELS[d.mode] || d.mode));
+    }).catch(function (err) {
+      toast(ICON.warning, "Could not change enforcement: " + (err.message || err));
+    });
+  }
+
+  (function initEnforcementUI() {
+    var seg = document.querySelector(".enforce-seg");
+    if (!seg) return;
+    seg.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("button[data-mode]");
+      if (!btn) return;
+      var newMode = btn.dataset.mode;
+      var curMode = "shadow";
+      var badges = document.getElementById("enforceBadge");
+      if (badges) curMode = (badges.className.match(/mode-(\w+)/) || [])[1] || "shadow";
+      if (newMode === curMode) return;
+      // Warn before escalating from shadow or quarantine → a blocking mode
+      var isEscalating = (curMode === "shadow" && newMode !== "shadow") ||
+                         (curMode === "quarantine" && newMode === "reject");
+      if (isEscalating) {
+        _enforcePending = newMode;
+        var modal = document.getElementById("enforceModal");
+        var title = document.getElementById("enforceModalTitle");
+        var body  = document.getElementById("enforceModalBody");
+        var confirmBtn = document.getElementById("enforceModalConfirm");
+        if (newMode === "quarantine") {
+          title.textContent = "Enable quarantine mode?";
+          body.textContent = "Suspicious and malicious mail will be held in spool/quarantine/ instead of delivered. Confirm you've validated detection quality in monitor-only mode first.";
+          confirmBtn.className = "enforce-btn-confirm is-quarantine";
+        } else {
+          title.textContent = "Enable reject mode?";
+          body.textContent = "Malicious mail will be hard-rejected at the gateway. This affects live delivery immediately. Only enable after thorough shadow validation.";
+          confirmBtn.className = "enforce-btn-confirm";
+        }
+        modal.classList.add("open");
+      } else {
+        applyEnforcement(newMode);
+      }
+    });
+    document.getElementById("enforceModalCancel").addEventListener("click", function () {
+      _enforcePending = null;
+      document.getElementById("enforceModal").classList.remove("open");
+    });
+    document.getElementById("enforceModalConfirm").addEventListener("click", function () {
+      var mode = _enforcePending;
+      _enforcePending = null;
+      document.getElementById("enforceModal").classList.remove("open");
+      if (mode) applyEnforcement(mode);
+    });
+    document.getElementById("enforceModal").addEventListener("click", function (ev) {
+      if (ev.target === this) { _enforcePending = null; this.classList.remove("open"); }
+    });
+  })();
 
   function showUsersError(msg) {
     var el = document.getElementById("usersError");
@@ -2889,18 +3095,20 @@
 
   /* ============================== NAV / TABS ============================== */
   var PAGE_META = {
-    overview: ["Overview", "Live view of mail arriving at the gateway, before Google Workspace"],
+    overview:   ["Overview",              "Live view of mail arriving at the gateway, before Google Workspace"],
     quarantine: ["Blocked & quarantined", "Everything held at the gateway — retained 7 days for admin retest"],
-    analyze: ["Analyze", "Upload an .eml for LLM deep analysis and SEGS heuristic scoring"],
-    audit: ["Audit log", "Gateway decisions plus every signed-in user's console activity"],
-    users: ["Users", "Local account management — admin / analyst / viewer roles"]
+    analyze:    ["Analyze",               "Upload an .eml for LLM deep analysis and SEGS heuristic scoring"],
+    audit:      ["Audit log",             "Gateway decisions plus every signed-in user's console activity"],
+    users:      ["Users",                 "Local account management — admin / analyst / viewer roles"],
+    settings:   ["Settings",             "Gateway enforcement mode and protection policy — admin only"]
   };
   function closeAllFloatWindows() {
     Object.keys(floatWindows).forEach(closeFloatWindow);
   }
   function setPage(page) {
-    if (page === "users" && !(window.__SEG_CURRENT_USER__ && window.__SEG_CURRENT_USER__.role === "admin")) {
-      toast(ICON.warning, "User management requires Admin role");
+    var admin = window.__SEG_CURRENT_USER__ && window.__SEG_CURRENT_USER__.role === "admin";
+    if ((page === "users" || page === "settings") && !admin) {
+      toast(ICON.warning, page === "settings" ? "Settings requires Admin role" : "User management requires Admin role");
       page = "overview";
     }
     if (state.activePage !== page) closeAllFloatWindows();
@@ -2913,6 +3121,7 @@
     document.getElementById("pageTitle").textContent = PAGE_META[page][0];
     document.getElementById("pageSub").textContent = PAGE_META[page][1];
     if (page === "users") loadUsers();
+    if (page === "settings") { loadEnforcement(); loadPolicy().then(renderPolicyPanel); }
   }
   Array.prototype.forEach.call(document.querySelectorAll(".nav-item"), function (btn) {
     btn.addEventListener("click", function () { setPage(btn.dataset.page); });
@@ -2969,6 +3178,7 @@
   // deciding what's interactive — avoids racing an unresolved fetch.
   window.__SEG_AUTH_READY__.then(function () {
     syncUserChrome();
+    loadEnforcement();
     return Promise.all([loadPolicy(), loadFeed(), loadOrg()]);
   }).then(function () {
     renderPolicyPanel();

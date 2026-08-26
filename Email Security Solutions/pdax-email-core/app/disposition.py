@@ -29,6 +29,7 @@ from .models import (
 )
 
 _RULES = Path(__file__).resolve().parents[1] / "rules" / "disposition.yaml"
+_ENFORCE_MODE_FILE = Path(__file__).resolve().parents[1] / "rules" / "enforcement_mode.yaml"
 
 _DEFAULT_POLICY = {
     "verdict_actions": {
@@ -57,15 +58,37 @@ def load_disposition_policy(path: Optional[Path] = None) -> dict:
     return dict(_DEFAULT_POLICY)
 
 
+def _read_runtime_enforce_mode() -> Optional[str]:
+    """Read the admin-written runtime override from rules/enforcement_mode.yaml.
+
+    Returns the raw mode string, or None if the file is absent/unreadable.
+    Re-read on every call so a dashboard PUT /api/enforcement takes effect on
+    the next email without requiring a process restart.
+    """
+    try:
+        if _ENFORCE_MODE_FILE.is_file():
+            data = yaml.safe_load(_ENFORCE_MODE_FILE.read_text()) or {}
+            mode = data.get("mode", "").strip().lower()
+            if mode:
+                return mode
+    except Exception:
+        pass
+    return None
+
+
 def resolve_enforce_mode(explicit: Optional[str] = None) -> EnforceMode:
-    raw = (explicit if explicit is not None
-           else os.environ.get("SEG_ENFORCE", "shadow")).strip().lower()
+    # Precedence: explicit arg > runtime file > SEG_ENFORCE env var > default shadow.
+    raw = explicit
+    if raw is None:
+        raw = _read_runtime_enforce_mode()
+    if raw is None:
+        raw = os.environ.get("SEG_ENFORCE", "shadow")
+    raw = (raw or "shadow").strip().lower()
     if raw in ("1", "true", "yes", "quarantine", "enforce"):
         return EnforceMode.QUARANTINE
     if raw in ("reject", "reject_malicious"):
         return EnforceMode.REJECT
     if raw in ("0", "false", "no", "off", "null", "noop"):
-        # Explicit off — still compute disposition, but EnforcementClient no-ops.
         return EnforceMode.SHADOW
     try:
         return EnforceMode(raw)
@@ -166,6 +189,9 @@ class ShadowEnforcementClient:
             "from": result.from_header,
             "score": result.composite_score,
             "hard_override": result.hard_override,
+            "threat_class": result.threat_class,
+            "threat_confidence": result.threat_confidence,
+            "deep_analysis": result.deep_analysis,
             "iocs": result.iocs.model_dump() if hasattr(result.iocs, "model_dump") else {},
             "action_taken": "shadow_release",
         }
@@ -231,6 +257,9 @@ class LocalQuarantineClient:
             "from": result.from_header,
             "score": result.composite_score,
             "hard_override": result.hard_override,
+            "threat_class": result.threat_class,
+            "threat_confidence": result.threat_confidence,
+            "deep_analysis": result.deep_analysis,
             "reasons": result.reasons,
             "iocs": result.iocs.model_dump() if hasattr(result.iocs, "model_dump") else {},
         }

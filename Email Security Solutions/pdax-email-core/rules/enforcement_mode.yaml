@@ -1,0 +1,6 @@
+# Runtime enforcement mode — written by PUT /api/enforcement (admin only).
+# Overrides SEG_ENFORCE env var without requiring a server restart.
+# Values: shadow (monitor only) | quarantine (hold flagged mail) | reject (hard reject MALICIOUS)
+mode: shadow
+updated_by: system
+updated_at: ""

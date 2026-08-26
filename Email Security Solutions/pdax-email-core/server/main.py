@@ -26,6 +26,7 @@ from .routers import auth as auth_router
 from .routers import policy as policy_router
 from .routers import feed as feed_router
 from .routers import analyze as analyze_router
+from .routers import enforcement as enforcement_router
 from .security import MaxBodySizeMiddleware, SecurityHeadersMiddleware
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -37,18 +38,32 @@ _DASHBOARD_DIR = _ROOT / "dashboard"
 _config = None
 
 
+def _harden_tree(root: Path) -> None:
+    """Recursively restrict a directory tree to owner-only (dirs 700, files
+    600). Best-effort — never crashes startup on a permission error."""
+    if not root.is_dir():
+        return
+    try:
+        os.chmod(root, stat.S_IRWXU)  # 700
+        for p in root.rglob("*"):
+            try:
+                if p.is_dir():
+                    os.chmod(p, stat.S_IRWXU)  # 700
+                elif p.is_file():
+                    os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)  # 600
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+
 def _harden_data_dir() -> None:
-    """Restrict data/ to owner-only on startup — prevents other local users
-    from reading the credentials database or audit log."""
-    data_dir = _ROOT / "data"
-    if data_dir.is_dir():
-        try:
-            os.chmod(data_dir, stat.S_IRWXU)          # 700
-            for p in data_dir.iterdir():
-                if p.is_file():
-                    os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)   # 600
-        except OSError:
-            pass  # best-effort; don't crash startup on permission errors
+    """Restrict sensitive on-disk state to owner-only on startup — prevents
+    other local users from reading the credentials database, the audit log,
+    or quarantined email content in the spool. Runs every boot so files the
+    mail-processing pipeline creates at runtime are re-locked here."""
+    _harden_tree(_ROOT / "data")
+    _harden_tree(_ROOT / "gateway" / "spool")
 
 
 @asynccontextmanager
@@ -115,6 +130,7 @@ app.include_router(auth_router.router)
 app.include_router(policy_router.router)
 app.include_router(feed_router.router)
 app.include_router(analyze_router.router)
+app.include_router(enforcement_router.router)
 
 
 # Static dashboard last — catches everything not matched by an API route

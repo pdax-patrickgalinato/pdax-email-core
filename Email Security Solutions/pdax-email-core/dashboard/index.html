@@ -2754,10 +2754,10 @@
         '<td><div class="users-actions">' + pwBtn + delBtn + "</div></td>" +
         "</tr>";
     }).join("");
-    Array.prototype.forEach.call(body.querySelectorAll(“[data-user-pw]”), function (btn) {
-      btn.addEventListener(“click”, function () {
-        var id = btn.getAttribute(“data-user-pw”);
-        var name = btn.getAttribute(“data-user-name”) || id;
+    Array.prototype.forEach.call(body.querySelectorAll('[data-user-pw]'), function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-user-pw');
+        var name = btn.getAttribute('data-user-name') || id;
         openPwModal(id, name);
       });
     });

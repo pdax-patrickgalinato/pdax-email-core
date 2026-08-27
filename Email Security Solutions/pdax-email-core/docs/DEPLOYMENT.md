@@ -719,6 +719,43 @@ aws ecs update-service \
   --cluster segs --service segs-dashboard --desired-count 2
 ```
 
+### Connecting ClamAV (optional — defense-in-depth AV scan layer)
+
+SEGS is pre-wired to use ClamAV as a second attachment inspection layer on top of its existing static forensics. The integration is opt-in and activates by setting one environment variable.
+
+**How to wire it:**
+
+1. **Ensure clamd is running** on a host reachable from the SEGS ECS tasks. The most common setups:
+   - **Sidecar container** (recommended): add a `clamav` container to the `segs-dashboard` ECS task definition, sharing the same network namespace. clamd listens on `localhost:3310`.
+   - **Shared ECS service**: run clamd as a separate `segs-clamav` ECS service in the same VPC. Use the service's internal DNS name as `SEG_CLAMD_HOST`.
+
+2. **Install pyclamd**: in `requirements.txt`, uncomment the `pyclamd` line and rebuild the Docker image.
+
+3. **Add the env vars** to Secrets Manager (`segs/prod`):
+   ```bash
+   # For sidecar (same task):
+   SEG_SANDBOX_PROVIDER=clamav
+   SEG_CLAMD_HOST=localhost
+   SEG_CLAMD_PORT=3310
+
+   # For Unix socket (if using a shared volume mount):
+   SEG_CLAMD_SOCKET=/var/run/clamav/clamd.ctl
+   ```
+
+4. **Verify with an EICAR test**:
+   ```bash
+   # Upload an EML containing an EICAR test attachment via the Analyzer.
+   # The Attachment Detail section of the report should show:
+   # ClamAV | 🔴 MALICIOUS — Eicar-Signature
+   # Hard Override: clam_malicious
+   ```
+
+**What ClamAV adds:** Known malware signatures, ransomware families, known phishing kits, and known malicious macro payloads — the entire ClamAV database (~9M+ signatures). This complements the existing static heuristics (which catch novel/zero-day patterns) and VT hash lookups (cross-industry reputation). See `docs/CONFIGURATION.md §Defense in Depth` for the full layer breakdown.
+
+**Graceful degradation:** If clamd is not configured or is unreachable, SEGS logs `sandbox_clam_unavailable` and continues normally — no other stage is affected. A ClamAV hit fires the `clam_malicious` hard override (verdict = MALICIOUS, score = 100), gated by the `virtual_analyzer` policy category in `rules/policy.yaml`.
+
+---
+
 ### Refreshing Google IP list for WAF (quarterly)
 
 ```bash

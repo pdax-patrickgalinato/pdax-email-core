@@ -155,6 +155,38 @@ These are not SEGS application variables — they're used by the deployment scri
 
 ---
 
+## Defense in Depth — Attachment Inspection Layers
+
+SEGS inspects attachments through **four independent layers**. Each layer compensates for the blind spots of the others. They always run in this order:
+
+| Layer | What it catches | Always runs? | Requires |
+|-------|----------------|--------------|---------|
+| **① Static forensics** (`app/attachment_forensics.py`) | File-type spoofing (magic-byte vs extension), zip-bombs, Office macros (OLE + OOXML), PDF active content tokens, HTML credential forms, executable content, byte entropy | Yes — unconditional, offline, stdlib-only | Nothing |
+| **② ClamAV AV scan** (`app/pipeline/sandbox.py`) | Known malware signatures, ransomware families, known phishing kits, known malicious macros — the entire ClamAV signature database | No — opt-in; activates when `SEG_SANDBOX_PROVIDER=clamav` | `pyclamd` + running `clamd` daemon |
+| **③ VT hash reputation** (`app/pipeline/intel.py`, Stage 7) | Files already seen and confirmed malicious by the global VT community | No — requires `SEG_INTEL_CLIENT=vt_abuseipdb` + `SEG_VT_API_KEY` | VirusTotal API key |
+| **④ LLM content reasoning** (`app/pipeline/content_ai.py`, Stage 5) | Novel social engineering in VBA macro code strings, HTML phishing page lure text, context mismatches between email body and attachment content — what signatures cannot reason about | No — requires a real LLM provider (GLM, Bedrock, Gemini, Ollama) | LLM provider + API key |
+
+**ClamAV is purely additive.** Disabling or misconfiguring it does not affect the other layers. If `clamd` is unreachable, the pipeline logs `sandbox_clam_unavailable` and continues normally — the existing static forensics verdict stands.
+
+### ClamAV configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SEG_SANDBOX_PROVIDER` | `null` | Set to `clamav` to activate ClamAV scanning. Any other value keeps the no-op stub. |
+| `SEG_CLAMD_HOST` | `localhost` | clamd daemon hostname (used when `SEG_CLAMD_SOCKET` is not set). |
+| `SEG_CLAMD_PORT` | `3310` | clamd TCP port. |
+| `SEG_CLAMD_SOCKET` | — | Unix socket path (e.g. `/var/run/clamav/clamd.ctl`). When set, takes priority over host:port. Preferred for same-host/sidecar deployments. |
+
+**Activation checklist:**
+1. Install `pyclamd`: add `pyclamd` to `requirements.txt` (uncomment the stub) and rebuild the container.
+2. Ensure `clamd` is running and reachable from the SEGS container (sidecar or shared service).
+3. Set `SEG_SANDBOX_PROVIDER=clamav` in AWS Secrets Manager (`segs/prod`).
+4. Verify: upload an EICAR test EML via the Analyzer — the report should show `🔴 MALICIOUS — Eicar-Signature` in the Attachment Detail table and a `clam_malicious` hard override.
+
+The `virtual_analyzer` policy category in `rules/policy.yaml` gates whether a ClamAV hit fires the hard override. It defaults to `enabled: true`. To suppress ClamAV scoring without removing the env var, set `virtual_analyzer: enabled: false` in `rules/policy.yaml` — the scan still runs and is logged, but contributes nothing to the verdict.
+
+---
+
 ## JumpCloud SSO (planned future — disabled by default)
 
 The platform is SSO-ready. The `SSOMiddleware` in `server/security.py` reads `SEG_SSO_PROVIDER` at startup. When empty (the default), the middleware is a no-op and the platform uses its own session-cookie login. Set to `alb_oidc` to activate the JumpCloud SSO gate with no code changes.

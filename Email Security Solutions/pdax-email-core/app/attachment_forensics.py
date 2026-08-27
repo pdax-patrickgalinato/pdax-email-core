@@ -275,8 +275,14 @@ def _inspect_html(payload: bytes, findings: dict, flags: list) -> list:
     from .url_forensics import extract_urls, extract_anchors
     urls = sorted(set(extract_urls(text) + [h for _, h in extract_anchors(text)
                                              if h.lower().startswith(("http://", "https://"))]))
+    # Strip tags and collapse whitespace to give the LLM a readable preview of
+    # the page's human-visible text (lure copy, brand names, form labels).
+    # Kept short (2500 chars) to stay within the context budget.
+    plain = re.sub(r"<[^>]{0,2048}>", " ", text)
+    plain = " ".join(plain.split())[:2500]
     findings["html"] = {"has_form": has_form, "has_password_input": has_pw,
-                        "script_count": scripts, "meta_refresh": meta_refresh}
+                        "script_count": scripts, "meta_refresh": meta_refresh,
+                        "text_preview": plain}
     return urls[:40]
 
 

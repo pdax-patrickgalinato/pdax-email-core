@@ -98,6 +98,10 @@ _FLAG_DESCRIPTIONS = {
     "nlu_intent:reconnaissance": "NLU classifier identified the intent as reconnaissance — probing or target-profiling (test message, 'are you there', validity check) ahead of a follow-up attack.",
     # Sender history
     "first_time_sender": "This sender address has never been seen before in the past 6 months — new senders combined with suspicious content are a key BEC and phishing indicator.",
+    # ClamAV / Virtual Analyzer
+    "sandbox_clam_found": "ClamAV identified a known malware signature in this attachment — deterministic AV hit, very low false-positive rate.",
+    "sandbox_clam_unavailable": "ClamAV daemon was not reachable — this attachment was not AV-scanned; static forensics verdict stands.",
+    "clam_malicious": "ClamAV confirmed a known malware signature — verdict is MALICIOUS regardless of score.",
 }
 _FLAG_PREFIX_DESCRIPTIONS = {
     "banned_attachment": "Attachment has a banned, high-risk file type: .{value}",
@@ -364,6 +368,49 @@ def _intel_section(r: PipelineResult) -> list[str]:
     return lines
 
 
+def _attachment_detail_section(r: PipelineResult) -> list[str]:
+    """Per-attachment forensics table — filename, size, type, SHA-256, ClamAV result,
+    static severity, and top risk flags. Only emitted when at least one attachment
+    was processed."""
+    att_stage = next((s for s in r.stages if s.stage == "attachments"), None)
+    if not att_stage or not isinstance(att_stage.facts, dict):
+        return []
+    records = att_stage.facts.get("attachments") or []
+    if not records:
+        return []
+    lines = ["", "---", "", "## Attachment Detail", "",
+             "_Per-file forensics from static analysis and AV scan. "
+             "Static forensics runs unconditionally; ClamAV column shows '—' "
+             "when not configured._", ""]
+    rows = []
+    for rec in records:
+        fname = _sanitize(rec.get("filename") or "(unnamed)")
+        size_kb = f"{rec.get('size', 0) / 1024:.1f} KB"
+        sha = (rec.get("sha256") or "")[:16] + "…" if rec.get("sha256") else "—"
+        forensics = rec.get("forensics") or {}
+        detected = forensics.get("detected_type") or forensics.get("declared_extension") or "—"
+        sev = forensics.get("static_severity") or "—"
+        risk_flags = ", ".join(forensics.get("risk_flags", [])[:4]) or "—"
+        sandbox = rec.get("sandbox") or {}
+        if sandbox.get("result") == "malicious":
+            clam = f"🔴 MALICIOUS — {sandbox.get('signature', '?')}"
+        elif sandbox.get("result") == "clean":
+            clam = "🟢 clean"
+        elif sandbox.get("result") in ("skipped", None, ""):
+            clam = "—"
+        elif sandbox.get("result") == "pyclamd_not_installed":
+            clam = "⚠️ pyclamd missing"
+        elif sandbox.get("result") == "unavailable":
+            clam = "⚠️ clamd unreachable"
+        else:
+            clam = sandbox.get("result", "—")
+        rows.append([fname, size_kb, detected, sha, clam, sev, risk_flags])
+    lines.append(_md_table(rows, ["Filename", "Size", "Detected type",
+                                  "SHA-256 (first 16)", "ClamAV", "Severity", "Risk flags"]))
+    lines.append("")
+    return lines
+
+
 def text_report(r: PipelineResult) -> str:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     icon = _ICON.get(r.verdict, "")
@@ -518,6 +565,9 @@ def text_report(r: PipelineResult) -> str:
     _md_ioc_section("File hashes (SHA-256)", r.iocs.hashes_sha256)
     lines.append("")
     _md_ioc_section("Authenticated relay senders", r.iocs.authenticated_relay_senders)
+
+    # ── Attachment Detail ─────────────────────────────────────────────────────
+    lines.extend(_attachment_detail_section(r))
 
     # ── Footer ────────────────────────────────────────────────────────────────
     lines += [

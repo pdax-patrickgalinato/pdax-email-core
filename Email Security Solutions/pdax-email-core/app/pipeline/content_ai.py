@@ -112,13 +112,42 @@ def _summarize_context(context: dict) -> str:
     for rec in (atts.get("attachments") or [])[:5]:
         forensics = rec.get("forensics") or {}
         sev = forensics.get("static_severity")
+        fname = rec.get("filename", "?")
+        detail_parts = []
         if sev and sev != "NONE":
-            a_bits.append(f"{rec.get('filename', '?')}: static severity {sev} "
-                          f"({', '.join(forensics.get('risk_flags', [])[:4])})")
+            detail_parts.append(f"static severity {sev} "
+                                f"({', '.join(forensics.get('risk_flags', [])[:4])})")
         elif rec.get("banned"):
-            a_bits.append(f"{rec.get('filename', '?')}: banned file type")
+            detail_parts.append("banned file type")
+        # ClamAV result — highest-confidence signal, surface it first
+        sandbox = rec.get("sandbox") or {}
+        if sandbox.get("result") == "malicious":
+            detail_parts.insert(0, f"ClamAV MALICIOUS — {sandbox.get('signature', 'unknown signature')}")
+        # VBA macro details from oletools — lets LLM reason about macro intent
+        oletools = rec.get("oletools") or {}
+        if oletools.get("has_vba") and oletools.get("suspicious"):
+            kw_types = sorted({item.get("type", "") for item in oletools["suspicious"][:6]
+                               if item.get("type")})
+            detail_parts.append(f"VBA macro keywords: {', '.join(kw_types)}")
+        # PDF active content and embedded URLs
+        pdf = forensics.get("pdf") or {}
+        if pdf.get("active_content"):
+            detail_parts.append(f"PDF active content: {', '.join(pdf['active_content'][:4])}")
+        if pdf.get("embedded_urls"):
+            detail_parts.append(f"PDF URLs: {'; '.join(pdf['embedded_urls'][:3])}")
+        # HTML attachment — show readable page text so LLM can spot lure copy
+        html = forensics.get("html") or {}
+        if html.get("text_preview"):
+            preview = html["text_preview"][:400]
+            detail_parts.append(f"HTML content preview: {preview}")
+        # Archive: dangerous nested members
+        archive = forensics.get("archive") or {}
+        if archive.get("dangerous_members"):
+            detail_parts.append(f"archive contains: {', '.join(archive['dangerous_members'][:4])}")
+        if detail_parts:
+            a_bits.append(f"{fname}: " + "; ".join(detail_parts))
     if a_bits:
-        lines.append("Attachments: " + "; ".join(a_bits))
+        lines.append("Attachments: " + " | ".join(a_bits))
 
     intel = context.get("intel") or {}
     i_bits = []

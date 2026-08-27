@@ -175,6 +175,18 @@ def score_and_verdict(result: PipelineResult, weights: dict, thresholds: dict,
                           if f.startswith("spoofed_attachment_type") or f.startswith("double_extension_executable")]
         return
 
+    # ClamAV confirmed malicious signature — treated the same as a VirusTotal
+    # FOUND hit: deterministic, low false-positive rate, authoritative enough
+    # to bypass weighted scoring unconditionally. Gated by virtual_analyzer
+    # so teams can suppress it via policy.yaml if clamd is not yet deployed.
+    if (atts and any(f == "sandbox_clam_found" for f in (atts.red_flags or []))
+            and policy.is_enabled(policy_cfg, "virtual_analyzer")):
+        result.hard_override = "clam_malicious"
+        result.verdict = Verdict.MALICIOUS
+        result.composite_score = 100.0
+        result.reasons = [f for f in atts.red_flags if f == "sandbox_clam_found"]
+        return
+
     # Sender lookalike and BEC+VIP impersonation are sender-identity/content
     # signals, not owned by any of the 6 TMES categories (see policy.py's
     # module docstring) — always on, never gated by policy_cfg.

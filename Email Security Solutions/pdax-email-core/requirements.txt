@@ -33,6 +33,11 @@ openai                      # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI 
 #                             # as of this writing). Requires a separate local Ollama install
 #                             # (https://ollama.com), not a Python package.
 # google-auth                 # only if authenticating GLMProvider via a service-account credentials.json (SEG_GLM_CREDENTIALS_PATH/GOOGLE_APPLICATION_CREDENTIALS) instead of a fixed SEG_GLM_API_KEY
+# pyclamd                    # Stage 4 ClamAVSandboxProvider — stream-scans attachments via clamd (in-memory, no disk writes).
+#                             # Requires a running clamd daemon (install clamav on the host/sidecar, start clamd service).
+#                             # Activate: SEG_SANDBOX_PROVIDER=clamav + SEG_CLAMD_HOST/SEG_CLAMD_PORT or SEG_CLAMD_SOCKET.
+#                             # Without this package (or with clamd unreachable), the pipeline degrades gracefully to
+#                             # static-forensics-only — existing behaviour unchanged.
 # Stage 7 VTAbuseIPDBIntelClient (VirusTotal + AbuseIPDB free-tier REST APIs)
 # needs no extra dependency — stdlib urllib/sqlite3/json only, by design
 # (keeps this "standalone," no vt-py or other SDK). Set SEG_INTEL_CLIENT=vt_abuseipdb

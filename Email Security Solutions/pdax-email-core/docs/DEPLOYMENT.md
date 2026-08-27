@@ -172,23 +172,24 @@ aws iam put-role-policy \
 aws iam create-role \
   --role-name segs-lambda-role \
   --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+```
 
-aws iam attach-role-policy \
-  --role-name segs-lambda-role \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+Apply the managed policy document from `deploy/lambda-iam-policy.json` (replace `REPLACE_AWS_ACCOUNT_ID` first):
+
+```bash
+sed "s/REPLACE_AWS_ACCOUNT_ID/$AWS_ACCOUNT_ID/g" deploy/lambda-iam-policy.json > /tmp/lambda-policy.json
 
 aws iam put-role-policy \
   --role-name segs-lambda-role \
-  --policy-name segs-secrets-read \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:ap-southeast-1:'$AWS_ACCOUNT_ID':secret:segs/prod*"
-    }]
-  }'
+  --policy-name SegsLambdaPolicy \
+  --policy-document file:///tmp/lambda-policy.json
 ```
+
+The policy grants:
+- `secretsmanager:GetSecretValue` on `segs/prod-*` (to read `SEG_PUBSUB_TOKEN` and `SEG_GMAIL_USERS`)
+- `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` on the Lambda's own CloudWatch log group
+
+> **Security note**: The current policy grants access to the entire `segs/prod` secret. For least privilege, create a separate `segs/lambda` secret containing only `SEG_PUBSUB_TOKEN` and `SEG_GMAIL_USERS`, then restrict the ARN in `lambda-iam-policy.json` to `segs/lambda-*`. See the `_comment` field in the JSON file for the exact change.
 
 ---
 
@@ -753,6 +754,78 @@ SEGS is pre-wired to use ClamAV as a second attachment inspection layer on top o
 **What ClamAV adds:** Known malware signatures, ransomware families, known phishing kits, and known malicious macro payloads — the entire ClamAV database (~9M+ signatures). This complements the existing static heuristics (which catch novel/zero-day patterns) and VT hash lookups (cross-industry reputation). See `docs/CONFIGURATION.md §Defense in Depth` for the full layer breakdown.
 
 **Graceful degradation:** If clamd is not configured or is unreachable, SEGS logs `sandbox_clam_unavailable` and continues normally — no other stage is affected. A ClamAV hit fires the `clam_malicious` hard override (verdict = MALICIOUS, score = 100), gated by the `virtual_analyzer` policy category in `rules/policy.yaml`.
+
+---
+
+### Enabling Wazuh SIEM integration (S3 log shipping)
+
+SEGS ships audit logs to S3 as gzip-compressed JSONL batches. The shipper runs as a background thread inside the dashboard ECS task and is enabled by adding three env vars to Secrets Manager.
+
+**Step 1 — Create the S3 bucket** (if it doesn't already exist):
+
+```bash
+aws s3 create-bucket \
+  --bucket segs-logs-pdax \
+  --region ap-southeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-southeast-1
+
+# Enable server-side encryption
+aws s3api put-bucket-encryption \
+  --bucket segs-logs-pdax \
+  --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+# Block public access
+aws s3api put-public-access-block \
+  --bucket segs-logs-pdax \
+  --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+**Step 2 — Grant the ECS task role `s3:PutObject`**:
+
+```bash
+aws iam put-role-policy \
+  --role-name segs-task-role \
+  --policy-name segs-s3-log-shipping \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::segs-logs-pdax/segs/logs/*"
+    }]
+  }'
+```
+
+**Step 3 — Add env vars to Secrets Manager**:
+
+```bash
+# Add SEG_S3_BUCKET, SEG_S3_PREFIX, SEG_S3_REGION to segs/prod
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id segs/prod \
+  --secret-string "$(aws secretsmanager get-secret-value \
+    --region ap-southeast-1 --secret-id segs/prod \
+    --query SecretString --output text \
+    | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+d['SEG_S3_BUCKET'] = 'segs-logs-pdax'
+d['SEG_S3_PREFIX'] = 'segs/logs'
+d['SEG_S3_REGION'] = 'ap-southeast-1'
+print(json.dumps(d))")"
+
+bash deploy/update-service.sh
+```
+
+**Step 4 — Verify** (wait ~60 seconds for the first batch):
+
+```bash
+aws s3 ls s3://segs-logs-pdax/segs/logs/ --recursive --region ap-southeast-1 | tail -20
+```
+
+You should see `.jsonl.gz` objects under `segs/logs/activity_audit/` and optionally `segs/logs/shadow_enforcement/`.
+
+**Wazuh S3 integration**: point Wazuh's S3 bucket module at `segs-logs-pdax` with prefix `segs/logs`. Each record carries `"wazuh": true` and standard fields (`action`, `actor`, `actor_role`, `ts`, `detail`, `meta`). See `docs/OPERATIONS.md §Wazuh SIEM log shipping` for monitoring and troubleshooting.
 
 ---
 

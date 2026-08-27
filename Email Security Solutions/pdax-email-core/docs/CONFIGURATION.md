@@ -56,8 +56,68 @@ SEGS uses Zhipu/GLM via Vertex AI Model Garden for content analysis. The provide
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `SEG_INTEL_CLIENT` | `disabled` | No | Intel provider: `vt_abuseipdb` (both), `virustotal`, `abuseipdb`, `disabled` |
-| `SEG_VT_API_KEY` | — | If intel enabled | VirusTotal API key. Free tier: 4 requests/minute. Hashes and URLs are looked up; results cached in `data/ioc_cache.db`. |
+| `SEG_VT_API_KEY` | — | If intel enabled | VirusTotal API key. Free tier: 4 requests/minute, 500 lookups/day. Hashes and URLs are looked up; results cached in `data/ioc_cache.db`. |
 | `SEG_ABUSEIPDB_API_KEY` | — | If intel enabled | AbuseIPDB API key. Used to check sender IP reputation. |
+
+### VT / AbuseIPDB quota exhaustion
+
+When the daily lookup quota for VirusTotal or AbuseIPDB is exhausted (HTTP 429), SEGS sets a **process-level backoff flag** that remains active for one hour. During that window, every subsequent email scan skips intel lookups for the exhausted provider rather than sleeping 15 s per indicator and eventually hitting 429 again. This prevents the 120 s worst-case timeout spike (8 indicators × 15 s throttle) from recurring on every email once the daily cap is hit.
+
+**What users see when quota is exhausted:**
+- A yellow warning banner in the Analyze tab: *"⚠️ API quota limit reached: VirusTotal / AbuseIPDB …"*
+- A blockquote in the Full Markdown Report under the SEGS Gateway Analysis section
+- A `quota_flags` array in the `/api/analyze/eml` JSON response: `["quota_exhausted_vt"]` and/or `["quota_exhausted_abuseipdb"]`
+
+The flag resets automatically after one hour (or on process restart). Results for emails scanned during the quota window may be **incomplete** — indicators not checked will be re-evaluated on the next email scan once the quota resets.
+
+**Operational guidance:**
+- If quota exhaustion occurs frequently, upgrade to a paid VT / AbuseIPDB tier.
+- The `SEG_VT_MAX_INDICATORS_PER_EMAIL` tuning variable (see *Tuning / Performance* section below) caps how many indicators are looked up per email, slowing the rate of quota consumption.
+
+---
+
+## S3 / Wazuh SIEM Integration
+
+SEGS ships audit logs to S3 so that Wazuh (or any S3-compatible SIEM) can ingest them. The shipper runs as a background daemon thread inside the dashboard ECS task. It is **disabled by default** — no-op when `SEG_S3_BUCKET` is not set.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SEG_S3_BUCKET` | `""` | S3 bucket name. Leave empty to disable shipping. When set, the shipper thread starts automatically at container boot. |
+| `SEG_S3_PREFIX` | `segs/logs` | S3 key prefix. Keys follow the pattern `{prefix}/{source}/{YYYY}/{MM}/{DD}/{HHMMSS}-{uuid}.jsonl.gz`. |
+| `SEG_S3_REGION` | `ap-southeast-1` | AWS region for the S3 client. Defaults to `AWS_REGION` env var, then `ap-southeast-1`. |
+| `SEG_S3_SHIP_INTERVAL` | `60` | Flush interval in seconds. The shipper wakes up every N seconds, reads new log lines since the last checkpoint, and uploads a gzip-compressed JSONL batch to S3. |
+
+**Log sources shipped:**
+
+| Source name | Local file | Description |
+|-------------|-----------|-------------|
+| `activity_audit` | `data/activity_audit.jsonl` | Admin actions: login, release, block, user changes, settings saves |
+| `shadow_enforcement` | `gateway/spool/shadow_logs/shadow_enforcement.jsonl` | Shadow-mode enforcement decisions (emails that would have been quarantined/rejected) |
+
+Each record is tagged with `"wazuh": true` before upload so the Wazuh pipeline can identify SEGS-originating events. The dashboard "Wazuh alerts only" feed filter reads this field.
+
+**IAM permissions required** (ECS task role — already granted by `segs-task-role`):
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject"],
+  "Resource": "arn:aws:iam::ACCOUNT:s3:::BUCKET/segs/logs/*"
+}
+```
+
+**Checkpoint file**: `data/wazuh_shipper_offsets.json` — persists byte offsets across restarts so no records are re-shipped or skipped. Written atomically via `.tmp` + rename.
+
+---
+
+## Tuning / Performance
+
+These variables control timeout and throughput budgets. The defaults are calibrated for the free-tier VT rate limit (4 req/min) with up to 8 indicators per email. Raise the timeouts if you see 504 responses on EML uploads; lower `SEG_VT_MAX_INDICATORS_PER_EMAIL` to reduce VT quota consumption.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SEG_ANALYZE_TIMEOUT_SECONDS` | `300` | Per-phase timeout (seconds) for the EML Analyzer (`POST /api/analyze/eml`). Covers both the pipeline run and the GLM deep-analysis call separately — each phase gets this budget independently. Raise to `600` if large attachments or slow OSINT enrichment trigger 504 errors. |
+| `SEG_EMAIL_SCAN_TIMEOUT_SECONDS` | `300` | Timeout for live incoming Gmail email scans processed by the receiver. Applies to the full pipeline including GLM content analysis and VT intel lookups. |
+| `SEG_VT_MAX_INDICATORS_PER_EMAIL` | `8` | Maximum number of indicators (hashes + URLs + IPs) submitted to VirusTotal per email. Caps worst-case VT throttle at `8 × 15 s = 120 s` on the free tier. Raise if you need deeper coverage and have a paid API tier; lower to `3–4` to preserve daily quota on high-volume deployments. |
 
 ---
 

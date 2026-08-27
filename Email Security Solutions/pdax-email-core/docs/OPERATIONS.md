@@ -275,6 +275,83 @@ All alerts → SNS → `security@pdax.ph` + Wazuh SIEM.
 
 ---
 
+## VirusTotal / AbuseIPDB quota exhaustion
+
+### What it means
+
+When SEGS exhausts the daily lookup quota for VirusTotal or AbuseIPDB (HTTP 429 from the provider), it sets a **process-level backoff flag** that pauses intel lookups for that provider for one hour. This prevents the pipeline from blocking on every subsequent email during the quota window.
+
+**Indicators in the dashboard:**
+
+| Location | What you see |
+|----------|-------------|
+| Analyze tab | Yellow warning banner: *"⚠️ API quota limit reached: VirusTotal …"* |
+| Full Markdown Report | Blockquote under *SEGS Gateway Analysis* with a note about incomplete coverage |
+| API response | `quota_flags: ["quota_exhausted_vt"]` and/or `["quota_exhausted_abuseipdb"]` |
+
+Emails scanned during the quota window receive a **complete heuristic pipeline result** (header, sender, URL, attachment, content AI stages all run normally) but **threat-intel lookups are skipped** for affected indicators. The verdict is based on the heuristic score alone.
+
+### How long it lasts
+
+The backoff flag expires automatically **one hour after the 429 was first detected** (within the same uvicorn process). On process restart (ECS task restart or redeploy), the flag resets immediately regardless of the quota window.
+
+Note: the underlying API quota itself resets at **midnight UTC** (VirusTotal free tier). A process restart before midnight does not restore quota capacity — it only clears the in-memory flag, which means the next email will re-discover the 429 and re-set the flag for another hour.
+
+### What to do
+
+| Situation | Action |
+|-----------|--------|
+| Occasional quota exhaustion | No action needed — the backoff self-heals. Monitor the frequency. |
+| Daily exhaustion on most active days | Lower `SEG_VT_MAX_INDICATORS_PER_EMAIL` in Secrets Manager (`3–4` instead of `8`) to stretch the quota across more emails. |
+| Persistent exhaustion blocking threat coverage | Upgrade to a paid VirusTotal and/or AbuseIPDB tier. Update the API keys in Secrets Manager (`segs/prod`). |
+| Need immediate intel lookup during quota window | Force an ECS task restart (`bash deploy/update-service.sh`) — the flag clears on restart. Only do this if the API quota has also reset (after midnight UTC), otherwise the flag will be re-set on the first 429. |
+
+---
+
+## Wazuh SIEM log shipping
+
+SEGS ships audit logs to S3 as gzip-compressed JSONL batches so Wazuh (or any S3-sourced SIEM) can ingest them. This feature activates automatically when `SEG_S3_BUCKET` is set in Secrets Manager.
+
+### What gets shipped
+
+| Log source | Content |
+|-----------|---------|
+| **Activity audit** (`data/activity_audit.jsonl`) | All admin actions: login, email release/block, user management, settings changes, enforcement mode changes |
+| **Shadow enforcement** (`gateway/spool/shadow_logs/shadow_enforcement.jsonl`) | Emails that would have been quarantined or rejected in shadow mode |
+
+Each record is tagged `"wazuh": true`. S3 key format: `{SEG_S3_PREFIX}/{source}/{YYYY}/{MM}/{DD}/{HHMMSS}-{uuid}.jsonl.gz`
+
+### Monitoring the shipper
+
+The shipper logs to the container's stderr (CloudWatch → `/segs/dashboard`):
+
+```
+wazuh_shipper: disabled (SEG_S3_BUCKET not set)   # normal when bucket not configured
+wazuh_shipper: starting — bucket=segs-logs-pdax prefix=segs/logs interval=60s
+wazuh_shipper: shipped activity_audit 142 bytes → s3://segs-logs-pdax/segs/logs/activity_audit/...
+```
+
+**Verify shipping is working:**
+
+```bash
+aws logs filter-log-events \
+  --log-group-name /segs/dashboard \
+  --filter-pattern "wazuh_shipper: shipped" \
+  --region ap-southeast-1
+```
+
+**Check S3 for recent objects:**
+
+```bash
+aws s3 ls s3://YOUR_BUCKET/segs/logs/ --recursive --region ap-southeast-1 | tail -20
+```
+
+### Checkpoint file
+
+The shipper maintains byte offsets in `data/wazuh_shipper_offsets.json` (on EFS). This ensures no records are re-shipped or skipped across restarts. If this file is deleted, the shipper re-ships all records from the beginning of each log file — safe (Wazuh deduplicates by timestamp + content) but inefficient.
+
+---
+
 ## Common questions
 
 **Q: A phishing email got through. What happened?**

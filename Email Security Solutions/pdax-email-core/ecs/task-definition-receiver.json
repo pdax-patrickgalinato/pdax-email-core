@@ -25,7 +25,7 @@
         { "name": "SEG_GMAIL_DOMAIN",                  "value": "pdax.ph" },
         { "name": "SEG_CONTENT_PROVIDER",              "value": "glm" },
         { "name": "SEG_INTEL_CLIENT",                  "value": "vt_abuseipdb" },
-        { "name": "SEG_LANDING_FETCH",                 "value": "1" },
+        { "name": "SEG_LANDING_FETCH",                 "value": "0" },
         { "name": "SEG_RDAP_LOOKUP",                   "value": "1" },
         { "name": "SEG_LLM_TRIAGE",                    "value": "1" },
         { "name": "SEG_ANALYZE_TIMEOUT_SECONDS",       "value": "300" },

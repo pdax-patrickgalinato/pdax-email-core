@@ -12,5 +12,5 @@
 # changes needed anywhere.
 
 organization:
-  display_name: "PDAX"
+  display_name: ""
   regulator_context: "a BSP-regulated crypto exchange"

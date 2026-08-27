@@ -517,7 +517,36 @@
   .eml-content-details summary::-webkit-details-marker { display: none; }
   .eml-content-details summary::before { content: "▶ "; font-size: 10px; opacity: .6; }
   .eml-content-details[open] summary::before { content: "▼ "; }
-  .eml-content-pre { max-height: 300px; margin-top: 8px; font-size: 11px; }
+  .eml-content-pre { margin-top: 8px; }
+  .email-viewer {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-2); overflow: hidden; font-size: 13px;
+  }
+  .email-viewer-headers {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .email-viewer-hrow { display: flex; gap: 10px; line-height: 1.4; }
+  .email-viewer-label {
+    flex-shrink: 0; width: 64px; font-size: 11px; font-weight: 600;
+    color: var(--ink-muted); text-transform: uppercase; letter-spacing: .04em;
+    padding-top: 1px;
+  }
+  .email-viewer-value { color: var(--ink); word-break: break-word; flex: 1; }
+  .email-viewer-subject .email-viewer-value { font-weight: 600; font-size: 14px; }
+  .email-viewer-body {
+    padding: 16px; max-height: 380px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word; font-size: 13px;
+    line-height: 1.6; color: var(--ink-secondary); font-family: inherit;
+  }
+  .email-viewer-attachments {
+    padding: 8px 16px; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .email-viewer-att {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink-secondary);
+  }
   .analyze-denied {
     padding: 18px; border-radius: var(--radius-sm); background: var(--surface-2);
     border: 1px solid var(--border); color: var(--ink-muted);
@@ -978,10 +1007,10 @@
           </div>
           <div class="card" id="analyzeEmailContentCard" style="display:none;">
             <div class="card-head">
-              <div><h2>Email content</h2><div class="card-sub">Raw EML — headers and body as received</div></div>
+              <div><h2>Email content</h2><div class="card-sub">Parsed headers and decoded body</div></div>
               <button type="button" class="btn btn-sm" id="analyzeToggleEml">Collapse</button>
             </div>
-            <pre class="report-pre" id="analyzeEmailContent"></pre>
+            <div id="analyzeEmailContent"></div>
           </div>
           <div class="card">
             <div class="card-head">
@@ -2224,7 +2253,7 @@
     if (e.queueId) {
       html += '<details class="eml-content-details">' +
         '<summary>Email content <span style="font-weight:400;font-size:11px;color:var(--ink-muted);">— click to expand</span></summary>' +
-        '<pre class="report-pre eml-content-pre" id="fw-eml-' + escapeHtml(e.id) + '">Loading…</pre>' +
+        '<div class="eml-content-pre" id="fw-eml-' + escapeHtml(e.id) + '"><span style="color:var(--ink-muted);font-size:12px;">Loading…</span></div>' +
         '</details>';
     }
 
@@ -2298,8 +2327,8 @@
           loaded = true;
           fetch("/api/quarantine/" + encodeURIComponent(e.queueId) + "/download")
             .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
-            .then(function (text) { emlPre.textContent = text; })
-            .catch(function (err) { emlPre.textContent = "Could not load EML content (" + err + ")."; });
+            .then(function (text) { emlPre.innerHTML = renderEmailViewer(parseEml(text)); })
+            .catch(function (err) { emlPre.innerHTML = '<span style="color:var(--ink-muted);font-size:12px;">Could not load EML content (' + escapeHtml(String(err)) + ').</span>'; });
         });
       }
     }
@@ -3092,6 +3121,103 @@
     return false;
   }
 
+  function parseEml(raw) {
+    var nl = raw.indexOf("\r\n") !== -1 ? "\r\n" : "\n";
+    var sep = raw.indexOf(nl + nl);
+    var headerBlock = sep === -1 ? raw : raw.slice(0, sep);
+    var bodyRaw = sep === -1 ? "" : raw.slice(sep + nl.length * 2);
+    // Parse folded headers
+    var unfolded = headerBlock.replace(/\r?\n([ \t]+)/g, " ");
+    var lines = unfolded.split(/\r?\n/);
+    var headers = {};
+    var order = [];
+    for (var i = 0; i < lines.length; i++) {
+      var m = lines[i].match(/^([^:]+):\s*(.*)/);
+      if (m) {
+        var k = m[1].toLowerCase(), v = m[2];
+        if (!headers[k]) { headers[k] = v; order.push(k); }
+      }
+    }
+    // Detect multipart and extract text/plain
+    var ct = headers["content-type"] || "";
+    var boundary = (ct.match(/boundary=["']?([^"';\r\n]+)["']?/i) || [])[1];
+    var bodyText = "";
+    var attachments = [];
+    if (boundary) {
+      var parts = bodyRaw.split(new RegExp("--" + boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:--)?"));
+      for (var p = 1; p < parts.length; p++) {
+        var psep = parts[p].indexOf(nl + nl);
+        var phdr = psep === -1 ? parts[p] : parts[p].slice(0, psep);
+        var pbdy = psep === -1 ? "" : parts[p].slice(psep + nl.length * 2);
+        var pct = (phdr.match(/content-type:\s*([^\r\n;]+)/i) || [])[1] || "";
+        var pcd = (phdr.match(/content-disposition:\s*([^\r\n;]+)/i) || [])[1] || "";
+        var pcte = ((phdr.match(/content-transfer-encoding:\s*([^\r\n]+)/i) || [])[1] || "").trim().toLowerCase();
+        var pname = (phdr.match(/(?:name|filename)=["']?([^"';\r\n]+)["']?/i) || [])[1] || "";
+        if (/text\/plain/i.test(pct)) {
+          if (!bodyText) bodyText = decodeTransferEncoding(pbdy, pcte);
+        } else if (/text\/html/i.test(pct)) {
+          if (!bodyText) bodyText = "[HTML body — plain text not available]";
+        } else if (pcd.toLowerCase().indexOf("attachment") !== -1 || pname) {
+          attachments.push(pname || pct.trim());
+        }
+      }
+    } else {
+      var cte = ((headers["content-transfer-encoding"] || "")).trim().toLowerCase();
+      bodyText = decodeTransferEncoding(bodyRaw, cte);
+      if (/text\/html/i.test(ct) && !bodyText.trim()) bodyText = "[HTML body]";
+    }
+    return { headers: headers, order: order, body: bodyText.trim(), attachments: attachments };
+  }
+
+  function decodeTransferEncoding(text, enc) {
+    if (enc === "base64") {
+      try {
+        var clean = text.replace(/\s+/g, "");
+        return decodeURIComponent(escape(atob(clean)));
+      } catch(e) { return text; }
+    }
+    if (enc === "quoted-printable") {
+      return text
+        .replace(/=\r?\n/g, "")
+        .replace(/=([0-9A-Fa-f]{2})/g, function(_, h) { return String.fromCharCode(parseInt(h, 16)); });
+    }
+    return text;
+  }
+
+  function escapeHtmlStr(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function renderEmailViewer(parsed) {
+    var SHOW = ["from","to","cc","bcc","subject","date","reply-to","message-id"];
+    var LABEL = { from:"From", to:"To", cc:"Cc", bcc:"Bcc", subject:"Subject", date:"Date", "reply-to":"Reply-To", "message-id":"Message-ID" };
+    var rows = "";
+    for (var i = 0; i < SHOW.length; i++) {
+      var k = SHOW[i];
+      if (parsed.headers[k]) {
+        var cls = k === "subject" ? " email-viewer-subject" : "";
+        rows += '<div class="email-viewer-hrow' + cls + '">' +
+          '<span class="email-viewer-label">' + LABEL[k] + '</span>' +
+          '<span class="email-viewer-value">' + escapeHtmlStr(parsed.headers[k]) + '</span>' +
+          '</div>';
+      }
+    }
+    var attHtml = "";
+    if (parsed.attachments.length) {
+      attHtml = '<div class="email-viewer-attachments">';
+      for (var a = 0; a < parsed.attachments.length; a++) {
+        attHtml += '<span class="email-viewer-att">📎 ' + escapeHtmlStr(parsed.attachments[a]) + '</span>';
+      }
+      attHtml += '</div>';
+    }
+    var bodyHtml = parsed.body
+      ? '<div class="email-viewer-body">' + escapeHtmlStr(parsed.body) + '</div>'
+      : '<div class="email-viewer-body" style="color:var(--ink-muted);font-style:italic;">No plain-text body found.</div>';
+    return '<div class="email-viewer">' +
+      '<div class="email-viewer-headers">' + rows + '</div>' +
+      bodyHtml + attHtml + '</div>';
+  }
+
   function renderAnalyzeResults(data) {
     var threat = (data.analysis && data.analysis.threat_assessment) || {};
     var content = (data.analysis && data.analysis.content_analysis) || {};
@@ -3313,10 +3439,10 @@
     document.getElementById("analyzeToggleMd").textContent = "Collapse";
 
     var emlContentCard = document.getElementById("analyzeEmailContentCard");
-    var emlContentPre = document.getElementById("analyzeEmailContent");
+    var emlContentEl = document.getElementById("analyzeEmailContent");
     if (analyzeRawEml) {
-      emlContentPre.textContent = analyzeRawEml;
-      emlContentPre.style.display = "block";
+      emlContentEl.innerHTML = renderEmailViewer(parseEml(analyzeRawEml));
+      emlContentEl.style.display = "";
       document.getElementById("analyzeToggleEml").textContent = "Collapse";
       emlContentCard.style.display = "";
     } else {
@@ -3573,9 +3699,9 @@
       this.textContent = hide ? "Expand" : "Collapse";
     });
     document.getElementById("analyzeToggleEml").addEventListener("click", function () {
-      var pre = document.getElementById("analyzeEmailContent");
-      var hide = pre.style.display !== "none";
-      pre.style.display = hide ? "none" : "block";
+      var el = document.getElementById("analyzeEmailContent");
+      var hide = el.style.display !== "none";
+      el.style.display = hide ? "none" : "";
       this.textContent = hide ? "Expand" : "Collapse";
     });
   })();

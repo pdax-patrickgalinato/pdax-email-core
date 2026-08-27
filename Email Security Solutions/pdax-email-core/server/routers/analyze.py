@@ -26,9 +26,12 @@ router = APIRouter(prefix="/api/analyze", tags=["analyze"])
 
 _MAX_EML_BYTES = 15 * 1024 * 1024  # 15 MB
 # Per-phase timeout for each asyncio.to_thread() call (pipeline run + LLM deep analysis).
-# Emails with many large attachments, active OSINT enrichment, or slow LLM responses can
-# take 60–120 s; raise SEG_ANALYZE_TIMEOUT_SECONDS if your environment is consistently slower.
-_ANALYZE_TIMEOUT = int(os.getenv("SEG_ANALYZE_TIMEOUT_SECONDS", "120"))
+# When SEG_INTEL_CLIENT=vt_abuseipdb is set, fresh (non-cached) VT lookups sleep ~15 s
+# each for the free-tier rate-limit throttle. With the default SEG_VT_MAX_INDICATORS_PER_EMAIL=8
+# cap that means up to 8×15 = 120 s of throttle alone, before any actual I/O time.
+# The 300 s default covers this plus realistic PDF/archive forensics + optional LLM call.
+# Lower to 120 s if VT is disabled (SEG_INTEL_CLIENT=local) or the cache is warm.
+_ANALYZE_TIMEOUT = int(os.getenv("SEG_ANALYZE_TIMEOUT_SECONDS", "300"))
 
 
 def _pipeline_summary(raw: bytes, filename: str, correlation_store=None) -> tuple[dict, object]:

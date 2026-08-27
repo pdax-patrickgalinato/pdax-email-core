@@ -204,17 +204,26 @@ class VTAbuseIPDBIntelClient:
         self._vt_last_call = time.time()
 
     def _vt_check(self, path: str, indicator: str, indicator_type: str,
-                  save_details: bool = False) -> Optional[bool]:
+                  save_details: bool = False, _budget: list = None) -> Optional[bool]:
         """Returns True (malicious), False (clean), or None (degraded/error —
         caller should not trust this result either way).
 
         When save_details=True (domain checks), the full VT attributes are also
-        cached so get_domain_details() can retrieve them without a second API call."""
+        cached so get_domain_details() can retrieve them without a second API call.
+
+        _budget: mutable [remaining_calls] list. When provided and exhausted,
+        uncached indicators are skipped rather than sleeping for 15 s per call —
+        this bounds per-email VT throttle time to budget × 15 s.
+        Cache hits are always honoured regardless of the budget."""
         cached = self.cache.get(indicator, indicator_type, "virustotal")
         if cached is not None:
             return cached == "malicious"
         if not self.vt_api_key:
             return None
+        if _budget is not None:
+            if _budget[0] <= 0:
+                return None   # budget exhausted — degrade gracefully, don't sleep
+            _budget[0] -= 1
         self._vt_throttle()
         status, data = self._http_get(
             f"https://www.virustotal.com/api/v3/{path}",
@@ -241,13 +250,17 @@ class VTAbuseIPDBIntelClient:
                            "ok", json.dumps(details))
         return malicious
 
-    def _vt_url_check(self, url: str) -> Optional[bool]:
+    def _vt_url_check(self, url: str, _budget: list = None) -> Optional[bool]:
         """URL-specific check: lookup existing report, submit for scanning on 404."""
         cached = self.cache.get(url, "url", "virustotal")
         if cached is not None:
             return cached == "malicious"
         if not self.vt_api_key:
             return None
+        if _budget is not None:
+            if _budget[0] <= 0:
+                return None
+            _budget[0] -= 1
         url_id = self._vt_url_id(url)
         self._vt_throttle()
         status, data = self._http_get(
@@ -302,12 +315,16 @@ class VTAbuseIPDBIntelClient:
         except Exception:
             return None
 
-    def _abuseipdb_check(self, ip: str) -> Optional[bool]:
+    def _abuseipdb_check(self, ip: str, _budget: list = None) -> Optional[bool]:
         cached = self.cache.get(ip, "ip", "abuseipdb")
         if cached is not None:
             return cached == "malicious"
         if not self.abuseipdb_api_key:
             return None
+        if _budget is not None:
+            if _budget[0] <= 0:
+                return None
+            _budget[0] -= 1
         status, data = self._http_get(
             f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90",
             {"Key": self.abuseipdb_api_key, "Accept": "application/json"},
@@ -328,26 +345,44 @@ class VTAbuseIPDBIntelClient:
         if not self.vt_api_key and not self.abuseipdb_api_key:
             return [], True   # no keys configured at all — honest degrade
 
+        # Per-email cap on fresh (non-cached) API calls. Each fresh VT call
+        # sleeps ~15 s for the rate-limit throttle, so N fresh calls cost N×15 s.
+        # With many attachments + many URLs this blows through any reasonable
+        # per-request timeout. Cache hits are always honoured regardless of budget.
+        # Tune via SEG_VT_MAX_INDICATORS_PER_EMAIL; default 8 → ≤120 s throttle.
+        max_fresh = int(os.environ.get("SEG_VT_MAX_INDICATORS_PER_EMAIL", "8"))
+        budget = [max_fresh]   # mutable so sub-methods can decrement in place
+
         hits = []
         any_error = False
 
+        # Hashes checked FIRST — highest-value signal for attachment-heavy emails;
+        # a hash match is definitive malware confirmation. This ensures attachment
+        # reputation lookups always run even when the budget is tight.
+        for h in set(hashes or []):
+            result = self._vt_check(f"files/{h}", h, "hash", _budget=budget)
+            if result is None and self.vt_api_key:
+                any_error = True
+            elif result:
+                hits.append(f"intel_hash:{h}")
+
         for d in set(domains or []):
-            result = self._vt_check(f"domains/{d}", d, "domain", save_details=True)
+            result = self._vt_check(f"domains/{d}", d, "domain", save_details=True, _budget=budget)
             if result is None and self.vt_api_key:
                 any_error = True
             elif result:
                 hits.append(f"intel_domain:{d}")
 
         for ip in set(ips or []):
-            ab_result = self._abuseipdb_check(ip)
-            vt_result = self._vt_check(f"ip_addresses/{ip}", ip, "ip") if self.vt_api_key else None
+            ab_result = self._abuseipdb_check(ip, _budget=budget)
+            vt_result = self._vt_check(f"ip_addresses/{ip}", ip, "ip", _budget=budget) if self.vt_api_key else None
             if ab_result is None and vt_result is None and (self.abuseipdb_api_key or self.vt_api_key):
                 any_error = True
             elif ab_result or vt_result:
                 hits.append(f"intel_ip:{ip}")
 
         for u in set(urls or []):
-            result = self._vt_url_check(u)
+            result = self._vt_url_check(u, _budget=budget)
             if result is None and self.vt_api_key:
                 # Check if it was a 404+submission (not an error) vs a real failure.
                 # A submitted URL has a "submitted:" cache entry; a real error has none.
@@ -357,13 +392,6 @@ class VTAbuseIPDBIntelClient:
                     any_error = True
             elif result:
                 hits.append(f"intel_url:{u}")
-
-        for h in set(hashes or []):
-            result = self._vt_check(f"files/{h}", h, "hash")
-            if result is None and self.vt_api_key:
-                any_error = True
-            elif result:
-                hits.append(f"intel_hash:{h}")
 
         return sorted(set(hits)), any_error
 

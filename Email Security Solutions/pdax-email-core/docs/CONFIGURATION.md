@@ -12,7 +12,7 @@ All environment variables for production deployments are stored in AWS Secrets M
 | `SEG_QUARANTINE_ROOT` | `gateway/spool` | Yes | Absolute path to the quarantine spool directory. Set to `/opt/segs/gateway/spool` in containers. |
 | `SEG_COOKIE_SECURE` | `0` | Yes (prod) | Set to `1` when running behind HTTPS (ALB). Enables `Secure` cookie flag + HSTS header. |
 | `SEG_SECRET_KEY` | auto-generated | Recommended | Django-style secret key for session signing. Set explicitly to persist sessions across restarts. Generate: `python3 -c "import secrets; print(secrets.token_hex(32))"` |
-| `SEG_LANDING_FETCH` | `0` | No | Set to `1` to fetch landing pages behind URLs (redirect chain resolution). Adds latency but improves URL analysis accuracy. |
+| `SEG_LANDING_FETCH` | `0` | No | **Keep at `0` in all environments.** This flag made SEGS fetch attacker URLs directly from the SEGS machine — exposing your infrastructure IP, fingerprinting the scanner via the `SEGS-LandingFetch/1.0` user-agent, and leaving an unpatched DNS rebinding SSRF gap. URL intelligence is now handled safely by VirusTotal URL submission (VT's servers fetch the URL, not SEGS) and ClamAV URL signature scanning (local, no outbound connection). See §URL Analysis below. |
 | `SEG_RDAP_LOOKUP` | `0` | No | Set to `1` to enable RDAP domain registration date lookup. Penalizes newly registered domains. |
 | `SEG_LLM_TRIAGE` | `0` | No | Set to `1` to enable LLM-assisted verdict triage in Stage 9. Adds a second GLM call for borderline scores. |
 
@@ -216,6 +216,21 @@ These are not SEGS application variables — they're used by the deployment scri
 
 ---
 
+## Defense in Depth — URL Analysis
+
+SEGS analyses every URL extracted from an email through **two safe layers**. Neither layer makes an outbound HTTP connection from the SEGS machine — there is no direct browsing of attacker links.
+
+> **Security note:** `SEG_LANDING_FETCH` is **permanently disabled** (`0`) in all environments. It previously made direct HTTP connections from the SEGS machine to attacker URLs, exposing the infrastructure IP, fingerprinting the scanner, and leaving an unpatched DNS rebinding SSRF gap. The two layers below provide equivalent or better coverage without those risks.
+
+| Layer | How it works | Who connects to the URL | Requires |
+|-------|-------------|------------------------|---------|
+| **① VirusTotal URL submission** (`app/pipeline/intel.py`, Stage 7) | URL submitted to VT's API → VT's own infrastructure fetches and scans it → reputation score returned. Known-bad URLs → `intel_url:` flag → `threat_intel_hit` hard override (MALICIOUS, score 100). New URLs are submitted for background scanning and return results on the next check. | **VT's servers — not SEGS** | `SEG_INTEL_CLIENT=vt_abuseipdb` + `SEG_VT_API_KEY` |
+| **② ClamAV URL scan** (`app/pipeline/intel.py`, Stage 7) | URL string bytes passed to local `clamd` via `scan_stream()`. ClamAV checks against its URL-based signature database: URLhaus, phishing patterns, malware-distribution indicators. A hit → `intel_url_clam:` flag → `threat_intel_hit` hard override (MALICIOUS, score 100). | **Nobody — local signature lookup, zero outbound** | `SEG_SANDBOX_PROVIDER=clamav` + `pyclamd` + running `clamd` |
+
+Both layers degrade gracefully: if VT quota is exhausted the URL check skips; if clamd is unreachable the URL string scan skips. Other pipeline stages continue normally.
+
+---
+
 ## Defense in Depth — Attachment Inspection Layers
 
 SEGS inspects attachments through **four independent layers**. Each layer compensates for the blind spots of the others. They always run in this order:
@@ -231,9 +246,11 @@ SEGS inspects attachments through **four independent layers**. Each layer compen
 
 ### ClamAV configuration
 
+Setting `SEG_SANDBOX_PROVIDER=clamav` activates ClamAV for **both** attachment scanning and URL string scanning simultaneously — one switch enables both layers.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEG_SANDBOX_PROVIDER` | `null` | Set to `clamav` to activate ClamAV scanning. Any other value keeps the no-op stub. |
+| `SEG_SANDBOX_PROVIDER` | `null` | Set to `clamav` to activate ClamAV scanning for attachments **and** URL strings. Any other value keeps the no-op stub. |
 | `SEG_CLAMD_HOST` | `localhost` | clamd daemon hostname (used when `SEG_CLAMD_SOCKET` is not set). |
 | `SEG_CLAMD_PORT` | `3310` | clamd TCP port. |
 | `SEG_CLAMD_SOCKET` | — | Unix socket path (e.g. `/var/run/clamav/clamd.ctl`). When set, takes priority over host:port. Preferred for same-host/sidecar deployments. |
@@ -242,9 +259,10 @@ SEGS inspects attachments through **four independent layers**. Each layer compen
 1. Install `pyclamd`: add `pyclamd` to `requirements.txt` (uncomment the stub) and rebuild the container.
 2. Ensure `clamd` is running and reachable from the SEGS container (sidecar or shared service).
 3. Set `SEG_SANDBOX_PROVIDER=clamav` in AWS Secrets Manager (`segs/prod`).
-4. Verify: upload an EICAR test EML via the Analyzer — the report should show `🔴 MALICIOUS — Eicar-Signature` in the Attachment Detail table and a `clam_malicious` hard override.
+4. Verify attachments: upload an EICAR test EML via the Analyzer — the report should show `🔴 MALICIOUS — Eicar-Signature` in the Attachment Detail table and a `clam_malicious` hard override.
+5. Verify URL scanning: upload an EML containing a URL from the URLhaus blocklist — the intel stage should show an `intel_url_clam:` flag and a `threat_intel_hit` hard override.
 
-The `virtual_analyzer` policy category in `rules/policy.yaml` gates whether a ClamAV hit fires the hard override. It defaults to `enabled: true`. To suppress ClamAV scoring without removing the env var, set `virtual_analyzer: enabled: false` in `rules/policy.yaml` — the scan still runs and is logged, but contributes nothing to the verdict.
+The `virtual_analyzer` policy category in `rules/policy.yaml` gates whether a ClamAV attachment hit fires the hard override. It defaults to `enabled: true`. To suppress ClamAV attachment scoring without removing the env var, set `virtual_analyzer: enabled: false` in `rules/policy.yaml`. ClamAV URL hits are gated by the `correlated_intelligence` category instead (same gate as VT URL hits).
 
 ---
 

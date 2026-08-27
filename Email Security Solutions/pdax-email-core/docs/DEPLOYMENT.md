@@ -720,14 +720,23 @@ aws ecs update-service \
   --cluster segs --service segs-dashboard --desired-count 2
 ```
 
-### Connecting ClamAV (optional — defense-in-depth AV scan layer)
+### Connecting ClamAV (recommended — defense-in-depth for attachments AND URLs)
 
-SEGS is pre-wired to use ClamAV as a second attachment inspection layer on top of its existing static forensics. The integration is opt-in and activates by setting one environment variable.
+SEGS is pre-wired to use ClamAV for **two independent scanning paths**. Both activate with a single environment variable and require no code changes.
+
+**What `SEG_SANDBOX_PROVIDER=clamav` enables:**
+
+| Scan path | Input | What ClamAV checks | Outbound connection from SEGS? |
+|-----------|-------|-------------------|-------------------------------|
+| **Attachment scan** (`app/pipeline/sandbox.py`) | Attachment bytes streamed to `clamd` | Full ClamAV signature database — malware, ransomware, phishing kits, malicious macros (~9M+ sigs) | None — local clamd only |
+| **URL string scan** (`app/pipeline/intel.py`) | URL bytes streamed to `clamd` | URL-based signatures — URLhaus blocklist, phishing URL patterns, malware-distribution domains | **None — local clamd only** |
+
+> **Important — URL detonation policy:** SEGS never opens attacker URLs from the SEGS machine. `SEG_LANDING_FETCH` is **permanently disabled (`0`) in all task definitions** — do not change it. URL intelligence comes from two safe sources: VirusTotal's API (VT's servers fetch the URL, not SEGS) and ClamAV URL signature scanning (local, zero outbound). See `docs/CONFIGURATION.md §Defense in Depth — URL Analysis`.
 
 **How to wire it:**
 
 1. **Ensure clamd is running** on a host reachable from the SEGS ECS tasks. The most common setups:
-   - **Sidecar container** (recommended): add a `clamav` container to the `segs-dashboard` ECS task definition, sharing the same network namespace. clamd listens on `localhost:3310`.
+   - **Sidecar container** (recommended): add a `clamav` container to both ECS task definitions (`segs-dashboard` and `segs-receiver`), sharing the same network namespace. clamd listens on `localhost:3310`.
    - **Shared ECS service**: run clamd as a separate `segs-clamav` ECS service in the same VPC. Use the service's internal DNS name as `SEG_CLAMD_HOST`.
 
 2. **Install pyclamd**: in `requirements.txt`, uncomment the `pyclamd` line and rebuild the Docker image.
@@ -743,17 +752,25 @@ SEGS is pre-wired to use ClamAV as a second attachment inspection layer on top o
    SEG_CLAMD_SOCKET=/var/run/clamav/clamd.ctl
    ```
 
-4. **Verify with an EICAR test**:
-   ```bash
-   # Upload an EML containing an EICAR test attachment via the Analyzer.
-   # The Attachment Detail section of the report should show:
+4. **Verify attachment scanning** — upload an EICAR test EML via the Analyzer:
+   ```
+   # Expected in the Full Markdown Report:
    # ClamAV | 🔴 MALICIOUS — Eicar-Signature
    # Hard Override: clam_malicious
    ```
 
-**What ClamAV adds:** Known malware signatures, ransomware families, known phishing kits, and known malicious macro payloads — the entire ClamAV database (~9M+ signatures). This complements the existing static heuristics (which catch novel/zero-day patterns) and VT hash lookups (cross-industry reputation). See `docs/CONFIGURATION.md §Defense in Depth` for the full layer breakdown.
+5. **Verify URL scanning** — upload an EML containing a URLhaus-listed URL:
+   ```
+   # Expected in the Intel stage flags:
+   # intel_url_clam:<url>
+   # Hard Override: threat_intel_hit   (verdict = MALICIOUS, score = 100)
+   ```
 
-**Graceful degradation:** If clamd is not configured or is unreachable, SEGS logs `sandbox_clam_unavailable` and continues normally — no other stage is affected. A ClamAV hit fires the `clam_malicious` hard override (verdict = MALICIOUS, score = 100), gated by the `virtual_analyzer` policy category in `rules/policy.yaml`.
+**Graceful degradation:** If clamd is not configured or is unreachable, both scan paths skip silently — SEGS logs `sandbox_clam_unavailable` for attachment scans and skips URL string scans without error. No other stage is affected. The pipeline always completes normally.
+
+**Policy gates:**
+- Attachment hits: gated by `virtual_analyzer` in `rules/policy.yaml` (default: `enabled: true`). A hit fires the `clam_malicious` hard override.
+- URL hits: gated by `correlated_intelligence` in `rules/policy.yaml` (default: `enabled: true`). A hit fires the `threat_intel_hit` hard override — same gate as VirusTotal URL matches.
 
 ---
 

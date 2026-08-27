@@ -275,6 +275,33 @@ All alerts → SNS → `security@pdax.ph` + Wazuh SIEM.
 
 ---
 
+## URL analysis — how SEGS inspects links
+
+SEGS analyses every URL in every email through two safe layers. **No link is ever opened or fetched from the SEGS machine itself.** `SEG_LANDING_FETCH` is permanently disabled (`0`) in all environments — do not change it.
+
+### Layer 1 — VirusTotal URL submission (always active when `SEG_INTEL_CLIENT=vt_abuseipdb`)
+
+Each URL is submitted to the VirusTotal API. VT's own infrastructure fetches and scans the URL — SEGS only sends the URL string and receives a reputation score back. Known-bad URLs produce an `intel_url:` flag and the `threat_intel_hit` hard override (verdict = MALICIOUS, score = 100).
+
+URLs not yet in VT's database are submitted for background scanning and return results on the next email containing that URL. The VT submission uses the same quota budget as hash/domain/IP lookups — see §VirusTotal / AbuseIPDB quota exhaustion below if the budget is regularly exhausted.
+
+### Layer 2 — ClamAV URL signature scan (active when `SEG_SANDBOX_PROVIDER=clamav`)
+
+Each URL's bytes are sent to the local `clamd` daemon via `scan_stream`. ClamAV checks the URL string against its URL-based signature database: URLhaus blocklist, known phishing domains, malware-distribution URL patterns. This is a **local signature lookup — zero outbound connection from SEGS**.
+
+A ClamAV URL hit produces an `intel_url_clam:` flag and the same `threat_intel_hit` hard override as a VT URL match. If clamd is not running, this layer skips silently — VT URL checking continues unaffected.
+
+### What this means for phishing links
+
+A phishing URL in an email will:
+1. Be checked against VT's reputation database (if `SEG_INTEL_CLIENT=vt_abuseipdb`)
+2. Be checked against ClamAV's URL signatures locally (if `SEG_SANDBOX_PROVIDER=clamav`)
+3. **Never be opened or fetched by the SEGS machine** — the attacker's server never receives a connection from SEGS infrastructure
+
+If neither VT nor ClamAV flag a URL (novel phishing not yet in any database), the URL analysis stage still runs heuristics: display/href mismatch detection, suspicious TLD scoring, brand-keyword lookalike matching, and IP-literal URL detection. These run offline with no external calls.
+
+---
+
 ## VirusTotal / AbuseIPDB quota exhaustion
 
 ### What it means

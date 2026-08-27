@@ -114,6 +114,7 @@ _FLAG_PREFIX_DESCRIPTIONS = {
     "intel_domain": "Domain '{value}' matched a known-bad threat-intelligence indicator.",
     "intel_ip": "IP '{value}' matched a known-bad threat-intelligence indicator.",
     "intel_url": "URL '{value}' matched a known-bad threat-intelligence indicator.",
+    "intel_url_clam": "URL '{value}' matched a ClamAV malicious-URL signature (URLhaus / phishing / malware distribution pattern) — checked locally with no outbound connection.",
     "intel_hash": "Attachment hash '{value}' matched a known-bad threat-intelligence indicator.",
     "ai": "AI reviewer identified a pattern not in the standard checklist: {value}",
     "spoofed_attachment_type": "An attachment's actual file type (from its content, not its name) doesn't match its declared extension: {value} — a classic disguised-executable trick.",

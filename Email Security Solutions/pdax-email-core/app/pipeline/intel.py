@@ -471,6 +471,16 @@ class VTAbuseIPDBIntelClient:
             elif result:
                 hits.append(f"intel_url:{u}")
 
+        # ClamAV URL scan — checks the URL string against ClamAV's local signature
+        # database (URLhaus, phishing, malware download patterns). No outbound HTTP
+        # connection is made from SEGS; safe for any URL including actively malicious ones.
+        # Gated by SEG_SANDBOX_PROVIDER=clamav (same switch as attachment scanning).
+        if os.environ.get("SEG_SANDBOX_PROVIDER", "").strip().lower() == "clamav":
+            for u in set(urls or []):
+                is_mal, _sig = _clam_url_scan(u)
+                if is_mal:
+                    hits.append(f"intel_url_clam:{u[:200]}")
+
         quota_flags: list[str] = []
         if not _vt_quota_ok():
             quota_flags.append("quota_exhausted_vt")
@@ -478,6 +488,38 @@ class VTAbuseIPDBIntelClient:
             quota_flags.append("quota_exhausted_abuseipdb")
 
         return sorted(set(hits)), any_error, quota_flags
+
+
+def _clam_url_scan(url: str) -> tuple[bool, "str | None"]:
+    """Scan a URL string through ClamAV's local signature database.
+
+    Passes the URL bytes to clamd via scan_stream — ClamAV checks against
+    URLhaus, phishing, and malware-distribution URL patterns in its database.
+    No outbound HTTP connection is ever made from SEGS; this is purely a local
+    signature lookup, safe for any URL including actively malicious ones.
+
+    Returns (is_malicious, signature_name). Degrades silently on any error
+    (pyclamd not installed, clamd not reachable) — the caller skips the result.
+    """
+    socket_path = os.environ.get("SEG_CLAMD_SOCKET", "").strip() or None
+    host = os.environ.get("SEG_CLAMD_HOST", "localhost").strip()
+    try:
+        port = int(os.environ.get("SEG_CLAMD_PORT", "3310"))
+    except ValueError:
+        port = 3310
+    try:
+        import pyclamd
+        cd = (pyclamd.ClamdUnixSocket(socket_path) if socket_path
+              else pyclamd.ClamdNetworkSocket(host, port))
+        result = cd.scan_stream(url.encode("utf-8", "replace"))
+        if result is None:
+            return False, None
+        _, (status, sig) = next(iter(result.items()))
+        return status == "FOUND", (sig if status == "FOUND" else None)
+    except ImportError:
+        return False, None
+    except Exception:
+        return False, None
 
 
 def get_default_intel_client() -> IntelClient:

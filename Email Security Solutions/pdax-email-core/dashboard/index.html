@@ -3286,6 +3286,23 @@
       (data.elapsed_ms ? (data.elapsed_ms / 1000).toFixed(1) + "s" : "") +
       (data.model ? " · " + data.model : "");
 
+    // API quota warning — surface when VT or AbuseIPDB daily limit was hit
+    var quotaWarnEl = document.getElementById("analyzeWarning");
+    var quotaFlags = data.quota_flags || [];
+    if (quotaFlags.length) {
+      var quotaNames = quotaFlags.map(function (f) {
+        return f === "quota_exhausted_vt" ? "VirusTotal" :
+               f === "quota_exhausted_abuseipdb" ? "AbuseIPDB" : f;
+      }).join(" and ");
+      quotaWarnEl.textContent = "⚠️ API quota limit reached: " + quotaNames +
+        " daily lookup limit exhausted — some indicators were not checked. " +
+        "Results may be incomplete. Quota resets at midnight UTC.";
+      quotaWarnEl.style.display = "";
+    } else {
+      quotaWarnEl.textContent = "";
+      quotaWarnEl.style.display = "none";
+    }
+
     var segsValue = vinfo.label + (pipe.score != null ? " · " + Number(pipe.score).toFixed(0) : "");
     var dispValue = pipe.disposition || "—";
     var dispCls = dispositionChipCls(dispValue);

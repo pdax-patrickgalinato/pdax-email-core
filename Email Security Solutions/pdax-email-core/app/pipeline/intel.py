@@ -32,8 +32,9 @@ from . import correlation as correlation_mod
 
 class IntelClient(Protocol):
     def check(self, domains: list[str], ips: list[str], urls: list[str],
-              hashes: list[str]) -> tuple[list[str], bool]:
-        """Return (hit_indicators, degraded)."""
+              hashes: list[str]) -> tuple:
+        """Return (hit_indicators, degraded) or (hit_indicators, degraded, quota_flags).
+        Callers must handle both lengths for backwards compatibility."""
         ...
 
 
@@ -52,7 +53,41 @@ class LocalIOCClient:
         hits += [f"intel_ip:{i}" for i in ips if i in self.bad_ips]
         hits += [f"intel_url:{u}" for u in urls if u in self.bad_urls]
         hits += [f"intel_hash:{h}" for h in hashes if h in self.bad_hashes]
-        return hits, False
+        return hits, False, []
+
+
+# ---------------------------------------------------------------------------
+# Process-level quota tracking — persists across email scans in the same
+# process so a 429 response from one email prevents useless 15-second sleeps
+# for all subsequent emails until the quota window resets.
+#
+# VT free tier: 500 lookups/day, resets midnight UTC.
+# AbuseIPDB free tier: 1000 lookups/day, resets midnight UTC.
+# We back off for 1 hour when a 429 is detected (conservative — avoids
+# hammering the API in the hours leading up to midnight reset while still
+# recovering promptly after the reset).
+# ---------------------------------------------------------------------------
+_QUOTA_BACKOFF_SECONDS = 3600.0   # 1 hour — conservative daily-limit backoff
+_vt_quota_exhausted_until: float = 0.0
+_abuseipdb_quota_exhausted_until: float = 0.0
+
+
+def _vt_quota_ok() -> bool:
+    return time.time() > _vt_quota_exhausted_until
+
+
+def _abuseipdb_quota_ok() -> bool:
+    return time.time() > _abuseipdb_quota_exhausted_until
+
+
+def _mark_vt_quota_exhausted() -> None:
+    global _vt_quota_exhausted_until
+    _vt_quota_exhausted_until = time.time() + _QUOTA_BACKOFF_SECONDS
+
+
+def _mark_abuseipdb_quota_exhausted() -> None:
+    global _abuseipdb_quota_exhausted_until
+    _abuseipdb_quota_exhausted_until = time.time() + _QUOTA_BACKOFF_SECONDS
 
 
 _DEFAULT_CACHE_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "intel_cache.sqlite3"
@@ -220,6 +255,10 @@ class VTAbuseIPDBIntelClient:
             return cached == "malicious"
         if not self.vt_api_key:
             return None
+        # Skip without sleeping if the process-level quota flag is set
+        # (a 429 was received this run — burns no budget and no sleep time).
+        if not _vt_quota_ok():
+            return None
         if _budget is not None:
             if _budget[0] <= 0:
                 return None   # budget exhausted — degrade gracefully, don't sleep
@@ -229,6 +268,9 @@ class VTAbuseIPDBIntelClient:
             f"https://www.virustotal.com/api/v3/{path}",
             {"x-apikey": self.vt_api_key},
         )
+        if status == 429:
+            _mark_vt_quota_exhausted()   # tell all future calls this session
+            return None
         if status != 200 or not data:
             return None
         attrs = (data.get("data", {}).get("attributes", {}) or {})
@@ -257,6 +299,8 @@ class VTAbuseIPDBIntelClient:
             return cached == "malicious"
         if not self.vt_api_key:
             return None
+        if not _vt_quota_ok():
+            return None
         if _budget is not None:
             if _budget[0] <= 0:
                 return None
@@ -267,6 +311,9 @@ class VTAbuseIPDBIntelClient:
             f"https://www.virustotal.com/api/v3/urls/{url_id}",
             {"x-apikey": self.vt_api_key},
         )
+        if status == 429:
+            _mark_vt_quota_exhausted()
+            return None
         if status == 200 and data:
             attrs = (data.get("data", {}).get("attributes", {}) or {})
             stats = attrs.get("last_analysis_stats", {})
@@ -287,6 +334,8 @@ class VTAbuseIPDBIntelClient:
             return
         if not self.vt_api_key:
             return
+        if not _vt_quota_ok():
+            return   # quota exhausted — skip submission
         import urllib.parse as _up
         body = _up.urlencode({"url": url}).encode("ascii")
         req = urllib.request.Request(
@@ -321,6 +370,8 @@ class VTAbuseIPDBIntelClient:
             return cached == "malicious"
         if not self.abuseipdb_api_key:
             return None
+        if not _abuseipdb_quota_ok():
+            return None
         if _budget is not None:
             if _budget[0] <= 0:
                 return None
@@ -329,6 +380,9 @@ class VTAbuseIPDBIntelClient:
             f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90",
             {"Key": self.abuseipdb_api_key, "Accept": "application/json"},
         )
+        if status == 429:
+            _mark_abuseipdb_quota_exhausted()
+            return None
         if status != 200 or not data:
             return None
         score = (data.get("data", {}) or {}).get("abuseConfidenceScore", 0)
@@ -393,7 +447,13 @@ class VTAbuseIPDBIntelClient:
             elif result:
                 hits.append(f"intel_url:{u}")
 
-        return sorted(set(hits)), any_error
+        quota_flags: list[str] = []
+        if not _vt_quota_ok():
+            quota_flags.append("quota_exhausted_vt")
+        if not _abuseipdb_quota_ok():
+            quota_flags.append("quota_exhausted_abuseipdb")
+
+        return sorted(set(hits)), any_error, quota_flags
 
 
 def get_default_intel_client() -> IntelClient:
@@ -429,7 +489,10 @@ def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
     urls = [u.get("url", "") for u in url_stage_facts.get("urls", [])]
     hashes = [a.get("sha256", "") for a in attach_facts.get("attachments", [])]
 
-    hits, degraded = client.check(all_domains, ips, urls, hashes)
+    _check_result = client.check(all_domains, ips, urls, hashes)
+    hits = _check_result[0]
+    degraded = _check_result[1]
+    quota_flags: list[str] = _check_result[2] if len(_check_result) > 2 else []
 
     # Domain reputation details — populated by VTAbuseIPDBIntelClient.check() via
     # save_details=True. Fall back silently if the client doesn't support this.
@@ -481,9 +544,10 @@ def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
 
     all_red_flags = hits + sender_flags
 
+    is_degraded = degraded or bool(quota_flags)
     return StageResult(
         stage="intel",
-        status=StageStatus.DEGRADED if degraded else StageStatus.OK,
+        status=StageStatus.DEGRADED if is_degraded else StageStatus.OK,
         sub_score=score,
         red_flags=all_red_flags,
         facts={"checked_domains": sorted(set(all_domains)), "checked_ips": sorted(set(ips)),
@@ -491,6 +555,7 @@ def run(pe: ParsedEmail, client: IntelClient, url_stage_facts: dict,
                "domain_details": domain_details,
                "body_email_domains": sorted(set(body_email_doms)),
                "behavioral_hits": behavioral_flags,
-               "behavioral_details": behavioral_details},
+               "behavioral_details": behavioral_details,
+               "quota_flags": quota_flags},
         latency_ms=int((time.perf_counter() - t0) * 1000),
     )

@@ -48,6 +48,7 @@ def _pipeline_summary(raw: bytes, filename: str, correlation_store=None) -> tupl
             "hits": intel_stage.facts.get("hits") or [],
             "behavioral_hits": intel_stage.facts.get("behavioral_hits") or [],
             "body_email_domains": intel_stage.facts.get("body_email_domains") or [],
+            "quota_flags": intel_stage.facts.get("quota_flags") or [],
         }
     summary = {
         "verdict": result.verdict.value,
@@ -91,6 +92,8 @@ def _segs_section(pipeline_result, pipeline_summary: dict) -> str:
     icon_map = {"CLEAN": "🟢", "LOW": "🔵", "SUSPICIOUS": "🟠", "MALICIOUS": "🔴"}
     icon = icon_map.get(verdict, "")
 
+    quota_flags = intel_facts.get("quota_flags") or []
+
     lines = [
         "",
         "---",
@@ -104,6 +107,22 @@ def _segs_section(pipeline_result, pipeline_summary: dict) -> str:
         f"**Verdict:** {icon} {verdict} — Score: **{score}/100**  ",
         f"**Disposition:** {disposition}  ",
     ]
+
+    if quota_flags:
+        _quota_labels = {
+            "quota_exhausted_vt": "VirusTotal",
+            "quota_exhausted_abuseipdb": "AbuseIPDB",
+        }
+        _providers = ", ".join(_quota_labels.get(f, f) for f in quota_flags)
+        lines += [
+            "",
+            f"> ⚠️ **API Quota Limit Reached — {_providers}**  ",
+            f"> Daily lookup quota for **{_providers}** was exhausted during this scan. "
+            "Threat-intelligence lookups for some indicators were skipped to avoid blocking "
+            "the pipeline. Results may be incomplete — indicators not yet checked will be "
+            "re-evaluated on the next email scan after the quota resets (midnight UTC). "
+            "Consider upgrading to a paid tier if this occurs frequently.",
+        ]
     if hard_override:
         lines += [
             "",
@@ -323,4 +342,5 @@ async def analyze_eml(
         "pipeline": pipeline,
         "elapsed_ms": elapsed_ms,
         "model": deep.get("model"),
+        "quota_flags": (pipeline or {}).get("intelFacts", {}).get("quota_flags") or [],
     }

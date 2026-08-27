@@ -40,6 +40,7 @@ Environment variables
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -70,6 +71,12 @@ if not _PUBSUB_TOKEN:
         "SEG_PUBSUB_TOKEN must be set — the receiver cannot start without it. "
         "Generate one with: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
     )
+
+# Per-message scan timeout. scan_message() is blocking (Gmail API + full pipeline including
+# LLM calls) and runs in a thread pool. If it exceeds this limit, the Pub/Sub handler
+# returns 204 and Google will retry delivery — safe because Gmail Pub/Sub retries are
+# idempotent (SEGS labels are checked before re-applying). Raise via SEG_EMAIL_SCAN_TIMEOUT_SECONDS.
+_SCAN_TIMEOUT = int(os.environ.get("SEG_EMAIL_SCAN_TIMEOUT_SECONDS", "300"))
 
 _SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
@@ -280,9 +287,20 @@ async def pubsub_push(request: Request):
             if not msg_id:
                 continue
             try:
-                summary = scan_message(email_address, msg_id)
+                # scan_message is entirely synchronous (Gmail API calls + full pipeline).
+                # Run it in a thread pool so the async event loop stays free, and enforce
+                # a hard timeout so a slow LLM or stalled network call can't block the
+                # handler indefinitely. On timeout, Google Pub/Sub retries delivery.
+                summary = await asyncio.wait_for(
+                    asyncio.to_thread(scan_message, email_address, msg_id),
+                    timeout=_SCAN_TIMEOUT,
+                )
                 results.append(summary)
                 print(f"[gmail_receiver] {email_address} {msg_id} → {summary['verdict']} ({summary['action']})",
+                      file=sys.stderr)
+            except asyncio.TimeoutError:
+                print(f"[gmail_receiver] scan_message timed out after {_SCAN_TIMEOUT}s for {msg_id} — "
+                      "Google will retry; raise SEG_EMAIL_SCAN_TIMEOUT_SECONDS if this is consistent",
                       file=sys.stderr)
             except Exception as exc:
                 print(f"[gmail_receiver] scan_message failed {msg_id}: {exc}", file=sys.stderr)

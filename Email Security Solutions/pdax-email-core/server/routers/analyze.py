@@ -8,6 +8,7 @@ this router is the only dashboard path that spends LLM tokens.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from email.utils import parseaddr
 from pathlib import Path
@@ -24,6 +25,10 @@ from server.security import analyze_limiter
 router = APIRouter(prefix="/api/analyze", tags=["analyze"])
 
 _MAX_EML_BYTES = 15 * 1024 * 1024  # 15 MB
+# Per-phase timeout for each asyncio.to_thread() call (pipeline run + LLM deep analysis).
+# Emails with many large attachments, active OSINT enrichment, or slow LLM responses can
+# take 60–120 s; raise SEG_ANALYZE_TIMEOUT_SECONDS if your environment is consistently slower.
+_ANALYZE_TIMEOUT = int(os.getenv("SEG_ANALYZE_TIMEOUT_SECONDS", "120"))
 
 
 def _pipeline_summary(raw: bytes, filename: str, correlation_store=None) -> tuple[dict, object]:
@@ -241,8 +246,17 @@ async def analyze_eml(
     t0 = time.perf_counter()
     corr = get_correlation_store()
     try:
-        pipeline, pipeline_result = await asyncio.to_thread(
-            _pipeline_summary, raw, filename, corr)
+        pipeline, pipeline_result = await asyncio.wait_for(
+            asyncio.to_thread(_pipeline_summary, raw, filename, corr),
+            timeout=_ANALYZE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Pipeline timed out after {_ANALYZE_TIMEOUT}s — the email may have many "
+                   "large attachments or slow OSINT enrichment. Raise SEG_ANALYZE_TIMEOUT_SECONDS "
+                   "or upload a smaller file.",
+        )
     except Exception:
         raise HTTPException(status_code=500, detail="Analysis failed — check server logs") from None
 
@@ -259,9 +273,18 @@ async def analyze_eml(
                        "or place credentials.json in the project root",
             )
         # analyze_eml_bytes is a blocking GLM call that can take minutes —
-        # run it in a thread so the async event loop stays free for other requests.
-        deep = await asyncio.to_thread(
-            analyze_eml_bytes, raw, filename, credentials_path=str(creds))
+        # run it in a thread with a timeout so a stalled LLM call doesn't hold the
+        # request open indefinitely. Raise SEG_ANALYZE_TIMEOUT_SECONDS if needed.
+        deep = await asyncio.wait_for(
+            asyncio.to_thread(analyze_eml_bytes, raw, filename, credentials_path=str(creds)),
+            timeout=_ANALYZE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"LLM analysis timed out after {_ANALYZE_TIMEOUT}s — the LLM is slow or "
+                   "the email payload is very large. Raise SEG_ANALYZE_TIMEOUT_SECONDS or retry.",
+        )
     except HTTPException:
         raise
     except FileNotFoundError as exc:

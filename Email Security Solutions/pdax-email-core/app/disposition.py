@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Protocol
 
-_SAFE_QUEUE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,128}$')
+_SAFE_QUEUE_ID_RE = re.compile(r'^[a-zA-Z0-9._\-]{1,128}$')
 
 import yaml
 

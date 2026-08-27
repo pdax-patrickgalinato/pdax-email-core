@@ -143,7 +143,7 @@ class MaxBodySizeMiddleware(BaseHTTPMiddleware):
 # Queue-ID validation
 # ---------------------------------------------------------------------------
 
-_QUEUE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,128}$")
+_QUEUE_ID_RE = re.compile(r"^[a-zA-Z0-9._\-]{1,128}$")
 
 
 def validate_queue_id(queue_id: str) -> None:
@@ -193,7 +193,7 @@ _SECURITY_HEADERS = {
     # Cross-origin isolation headers — mitigate Spectre-class side-channel attacks
     # and prevent cross-origin data leaks via SharedArrayBuffer or process reuse.
     "Cross-Origin-Opener-Policy": "same-origin",
-    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Embedder-Policy": "credentialless",
     "Cross-Origin-Resource-Policy": "same-origin",
 }
 

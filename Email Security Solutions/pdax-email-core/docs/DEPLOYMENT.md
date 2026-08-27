@@ -1,64 +1,93 @@
 # SEGS — AWS ECS Fargate Deployment Guide
 
+This guide deploys the Secure Email Gateway Suite (SEGS) to AWS ECS Fargate in the PDAX
+ap-southeast-1 environment. After following all steps you will have:
+
+- A live dashboard at `https://segs.pdax.ph` (internet-facing, SEGS login + rate limiting)
+- A Gmail Pub/Sub receiver at `https://segs-mail.pdax.ph` (Google IPs only, WAF-gated)
+- Persistent storage on EFS (SQLite databases + quarantine spool)
+- All secrets in AWS Secrets Manager — nothing sensitive in the Docker images
+- Daily Gmail watch renewal via EventBridge Lambda
+
+**Phases at a glance**
+
+| Phase | Steps | What it does |
+|-------|-------|-------------|
+| Infrastructure | 1 – 9 | ECR, EFS, IAM, ACM, Secrets Manager, task definitions, CloudWatch, ECS cluster |
+| Build & Deploy | 10 – 13 | Docker images → ECR, security groups, ALBs, ECS services |
+| Activation | 14 – 19 | DNS, first admin, Pub/Sub, Gmail watches, Lambda fallback, alarms |
+| Verification | — | Go-live checklist |
+
+**Before you start**: have `credentials.json` (GCP service account key) and all API keys
+ready. See [docs/GMAIL_API_SETUP.md](GMAIL_API_SETUP.md) for the GCP side.
+
+---
+
 ## Prerequisites
 
 | Requirement | Notes |
 |-------------|-------|
 | AWS CLI v2 | Configured with a role that can manage ECR, ECS, EFS, ALB, Secrets Manager |
 | Docker | For building and pushing images |
-| Python 3.12+ | For `deploy/setup-secrets.sh` helper |
-| Existing PDAX VPC | ap-southeast-1, with private and public subnets in ≥2 AZs |
+| Python 3.12+ | Used by `deploy/setup-secrets.sh` and `deploy/bootstrap_admin.sh` |
+| `curl` + `jq` | For verification and the bootstrap script |
+| Existing PDAX VPC | ap-southeast-1, private and public subnets in ≥ 2 AZs |
 | Route 53 hosted zone for `pdax.ph` | Or equivalent DNS admin access |
 | GCP project with Pub/Sub + service account | See [docs/GMAIL_API_SETUP.md](GMAIL_API_SETUP.md) |
-| JumpCloud SSO | **Planned future step** — not required for initial deployment. See [docs/JUMPCLOUD_SSO.md](JUMPCLOUD_SSO.md). |
 
 ---
 
-## Step 1 — Gather required values
+## Step 1 — Collect required values
 
-Collect these before starting. Nothing is hardcoded — all values go into Secrets Manager or shell variables.
+Collect everything before starting — nothing is hardcoded. All values go into Secrets Manager
+or shell variables.
 
-**AWS**
+**Recommended**: create a local `.env.prod` file (gitignored) and source it. The secrets
+setup script in Step 6 reads these automatically and skips interactive prompts.
+
+```bash
+# Create your local secrets file — NEVER commit this
+cp .env.example .env.prod
+nano .env.prod   # fill in all REPLACE_ME values
+```
+
+**AWS infrastructure** (get from your AWS account / PDAX network team)
 ```
 AWS_ACCOUNT_ID=<12-digit account ID>
 AWS_REGION=ap-southeast-1
 VPC_ID=vpc-xxxxxxxx
-PRIVATE_SUBNET_IDS=subnet-aaaa,subnet-bbbb    # ≥2 AZs, for ECS tasks (private, no public IP)
-PUBLIC_SUBNET_IDS=subnet-cccc,subnet-dddd     # ≥2 AZs, for both ALBs (internet-facing)
-OFFICE_CIDR=x.x.x.x/32                        # Optional: PDAX office public IP for extra SG restriction
+PRIVATE_SUBNET_IDS=subnet-aaaa,subnet-bbbb    # ≥2 AZs — for ECS tasks (no public IP)
+PUBLIC_SUBNET_IDS=subnet-cccc,subnet-dddd     # ≥2 AZs — for both ALBs
+OFFICE_CIDR=x.x.x.x/32                        # Optional: PDAX office IP for extra SG restriction
 ```
 
-**Domains (request ACM certs via DNS validation in Route 53)**
+**Domains** (you'll create ACM certs in Step 5)
 ```
-DASHBOARD_DOMAIN=segs.pdax.ph          # Internal, VPN-only
-RECEIVER_DOMAIN=segs-mail.pdax.ph      # Public, Google IPs only
+DASHBOARD_DOMAIN=segs.pdax.ph          # Dashboard — internet-facing, SEGS login is the gate
+RECEIVER_DOMAIN=segs-mail.pdax.ph      # Gmail receiver — Google IPs only (WAF-enforced)
 ```
 
-**Google (from GCP setup — see GMAIL_API_SETUP.md)**
+**Google / GCP** (from GCP Console and GMAIL_API_SETUP.md)
 ```
 SEG_GMAIL_TOPIC=projects/pdax-prod/topics/segs-gmail
 SEG_GMAIL_USERS=security@pdax.ph,pat@pdax.ph
-SEG_PUBSUB_TOKEN=<random token — generate: python3 -c "import secrets; print(secrets.token_urlsafe(32))">
-credentials.json  # GCP service account key file (downloaded from GCP Console)
+SEG_PUBSUB_TOKEN=<generate: python3 -c "import secrets; print(secrets.token_urlsafe(32))">
+credentials.json   # GCP service account key — downloaded from GCP Console
 ```
 
-**Content AI**
+**API keys**
 ```
-SEG_GLM_MODEL_ID=<from existing .env>
 SEG_GLM_API_KEY=<from existing .env>
 SEG_GLM_PROJECT_ID=<from existing .env>
-# ... fallback model IDs (see .env.example)
-```
-
-**Threat intel**
-```
-SEG_VT_API_KEY=<VirusTotal API key>
-SEG_ABUSEIPDB_API_KEY=<AbuseIPDB API key>
-```
-
-**SMTP notifications**
-```
-SEGS_NOTIFY_SMTP_PASS=<App Password for segs-alerts@pdax.ph>
+SEG_GLM_MODEL_ID=<from existing .env>
+SEG_GLM_FALLBACK1_MODEL_ID=<from existing .env>
+SEG_GLM_FALLBACK2_MODEL_ID=<from existing .env>
+SEG_GLM_FALLBACK2_LOCATION=<from existing .env>
+SEG_GLM_FALLBACK3_MODEL_ID=<from existing .env>
+SEG_GLM_FALLBACK3_LOCATION=<from existing .env>
+SEG_VT_API_KEY=<VirusTotal API key — virustotal.com/gui/my-apikey>
+SEG_ABUSEIPDB_API_KEY=<AbuseIPDB API key — abuseipdb.com/account/api>
+SEGS_NOTIFY_SMTP_PASS=<Google Workspace App Password for segs-alerts@pdax.ph>
 ```
 
 ---
@@ -77,8 +106,9 @@ aws ecr create-repository \
 
 ## Step 3 — Create EFS file system
 
+EFS provides persistent shared storage across ECS tasks for SQLite databases and the quarantine spool.
+
 ```bash
-# Create file system
 EFS_ID=$(aws efs create-file-system \
   --region ap-southeast-1 \
   --performance-mode generalPurpose \
@@ -86,7 +116,7 @@ EFS_ID=$(aws efs create-file-system \
   --encrypted \
   --query 'FileSystemId' --output text)
 
-echo "EFS_FILESYSTEM_ID=$EFS_ID"
+echo "EFS_FILESYSTEM_ID=$EFS_ID"   # save this — needed in Steps 7 and 13
 
 # Create mount targets in each private subnet
 for SUBNET_ID in subnet-aaaa subnet-bbbb; do
@@ -94,11 +124,9 @@ for SUBNET_ID in subnet-aaaa subnet-bbbb; do
     --region ap-southeast-1 \
     --file-system-id "$EFS_ID" \
     --subnet-id "$SUBNET_ID" \
-    --security-groups sg-efs-XXXXX   # SG that allows NFS (2049) from ECS tasks
+    --security-groups sg-efs-XXXXX   # SG that allows NFS (port 2049) from ECS task SGs
 done
 ```
-
-Note the `EFS_FILESYSTEM_ID` — you'll need it in Step 7.
 
 ---
 
@@ -106,7 +134,6 @@ Note the `EFS_FILESYSTEM_ID` — you'll need it in Step 7.
 
 ### ECS task execution role
 ```bash
-# Trust policy
 cat > /tmp/ecs-trust.json <<'EOF'
 {
   "Version": "2012-10-17",
@@ -122,12 +149,11 @@ aws iam create-role \
   --role-name segs-ecs-execution-role \
   --assume-role-policy-document file:///tmp/ecs-trust.json
 
-# Attach managed policies
 aws iam attach-role-policy \
   --role-name segs-ecs-execution-role \
   --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 
-# Allow reading the Secrets Manager secret
+# Allow reading Secrets Manager secret
 aws iam put-role-policy \
   --role-name segs-ecs-execution-role \
   --policy-name segs-secrets-read \
@@ -141,7 +167,7 @@ aws iam put-role-policy \
   }'
 ```
 
-### Lambda execution role (for watch renewal)
+### Lambda execution role (for Gmail watch renewal)
 ```bash
 aws iam create-role \
   --role-name segs-lambda-role \
@@ -169,34 +195,62 @@ aws iam put-role-policy \
 ## Step 5 — Request ACM certificates
 
 ```bash
-# Dashboard (internal ALB — DNS validation in Route 53)
+# Dashboard domain
 aws acm request-certificate \
   --region ap-southeast-1 \
   --domain-name segs.pdax.ph \
   --validation-method DNS
 
-# Receiver (internet-facing ALB)
+# Receiver domain
 aws acm request-certificate \
   --region ap-southeast-1 \
   --domain-name segs-mail.pdax.ph \
   --validation-method DNS
 ```
 
-Add the CNAME records to Route 53 as prompted by the ACM console. Validation completes in ~5 minutes.
+After running both commands, go to **ACM Console → Certificates → Create CNAME record in Route 53**
+for each certificate. Validation completes in about 5 minutes. Wait until both show **Issued** before
+continuing — the ALBs won't accept unvalidated certificates.
 
 ---
 
 ## Step 6 — Store secrets in AWS Secrets Manager
 
-From the repo root (with `credentials.json` present):
+This step uploads all API keys and the Google service account key to a single AWS Secrets Manager
+secret (`segs/prod`). ECS tasks read from it at startup — nothing sensitive is ever in the Docker
+image or task definition plaintext.
+
+**Option A — recommended (pre-fill `.env.prod`, run the script)**
 
 ```bash
+# Source your .env.prod from Step 1, then run:
+set -a && source .env.prod && set +a
 AWS_ACCOUNT_ID=123456789012 bash deploy/setup-secrets.sh
 ```
 
-This prompts for each secret value interactively, reads `credentials.json`, converts it to a single-line JSON string, and creates (or updates) the `segs/prod` secret.
+The script reads all values from the environment, converts `credentials.json` to an inline JSON
+string (`SEGS_GMAIL_CREDENTIALS_JSON`), and creates or updates the `segs/prod` secret.
 
-To update a single key later:
+**Option B — manual prompts (if .env.prod isn't ready yet)**
+
+```bash
+AWS_ACCOUNT_ID=123456789012 bash deploy/setup-secrets.sh
+# The script will prompt for each value interactively
+```
+
+**Verify the secret was created:**
+
+```bash
+aws secretsmanager get-secret-value \
+  --region ap-southeast-1 \
+  --secret-id segs/prod \
+  --query SecretString --output text \
+  | python3 -c "import json,sys; keys=json.load(sys.stdin).keys(); print('\n'.join(sorted(keys)))"
+```
+
+You should see all expected keys listed (SEG_GMAIL_TOPIC, SEG_VT_API_KEY, SEGS_GMAIL_CREDENTIALS_JSON, etc.).
+
+**Updating a single secret later (e.g., rotating a key):**
 
 ```bash
 aws secretsmanager put-secret-value \
@@ -206,25 +260,27 @@ aws secretsmanager put-secret-value \
     --region ap-southeast-1 --secret-id segs/prod \
     --query SecretString --output text \
     | python3 -c "import json,sys; d=json.load(sys.stdin); d['SEG_VT_API_KEY']='NEW_KEY'; print(json.dumps(d))")"
+
+# Then force a re-deploy so containers pick up the new value:
+bash deploy/update-service.sh
 ```
 
 ---
 
-## Step 7 — Fill in placeholders in task definitions
-
-Edit `ecs/task-definition-dashboard.json` and `ecs/task-definition-receiver.json`:
+## Step 7 — Fill in task definition placeholders
 
 ```bash
-# Replace all REPLACE_AWS_ACCOUNT_ID occurrences
+# Replace placeholder values with your actual account ID and EFS ID
 sed -i "s/REPLACE_AWS_ACCOUNT_ID/$AWS_ACCOUNT_ID/g" \
   ecs/task-definition-dashboard.json \
   ecs/task-definition-receiver.json
 
-# Replace REPLACE_EFS_FILESYSTEM_ID with your EFS ID
 sed -i "s/REPLACE_EFS_FILESYSTEM_ID/$EFS_ID/g" \
   ecs/task-definition-dashboard.json \
   ecs/task-definition-receiver.json
 ```
+
+> **Verify**: open both JSON files and confirm no `REPLACE_*` strings remain.
 
 ---
 
@@ -234,7 +290,6 @@ sed -i "s/REPLACE_EFS_FILESYSTEM_ID/$EFS_ID/g" \
 aws logs create-log-group --log-group-name /segs/dashboard --region ap-southeast-1
 aws logs create-log-group --log-group-name /segs/receiver  --region ap-southeast-1
 
-# Retention: 90 days (adjust to your policy)
 aws logs put-retention-policy --log-group-name /segs/dashboard \
   --retention-in-days 90 --region ap-southeast-1
 aws logs put-retention-policy --log-group-name /segs/receiver \
@@ -250,13 +305,12 @@ aws ecs create-cluster \
   --cluster-name segs \
   --region ap-southeast-1 \
   --capacity-providers FARGATE FARGATE_SPOT \
-  --default-capacity-provider-strategy \
-    capacityProvider=FARGATE,weight=1
+  --default-capacity-provider-strategy capacityProvider=FARGATE,weight=1
 ```
 
 ---
 
-## Step 10 — Build and push container images
+## Step 10 — Build and push Docker images
 
 From the repo root:
 
@@ -268,13 +322,15 @@ export ECR_REPO=pdax/segs
 bash deploy/push-images.sh
 ```
 
-This builds both images, tags them with the current Git SHA and `latest`, and pushes to ECR. The script logs into ECR automatically.
+This builds both images (dashboard + receiver), tags them with the current Git SHA and `latest`,
+and pushes to ECR. The script logs into ECR automatically. This step takes 3–5 minutes on first run.
 
 ---
 
 ## Step 11 — Create security groups
 
-### Dashboard ALB SG (internet-facing HTTPS — login is the access control layer)
+### Dashboard ALB SG (internet-facing — SEGS login is the access control layer)
+
 ```bash
 DASHBOARD_ALB_SG=$(aws ec2 create-security-group \
   --vpc-id $VPC_ID \
@@ -282,20 +338,19 @@ DASHBOARD_ALB_SG=$(aws ec2 create-security-group \
   --description "SEGS dashboard ALB — internet-facing" \
   --query 'GroupId' --output text)
 
-# Allow HTTPS from anywhere — SEGS login + rate limiting is the access control layer.
-# Optional: restrict to your office IP range instead (replace 0.0.0.0/0 with $OFFICE_CIDR).
+# Allow HTTPS from anywhere. SEGS enforces login + rate limiting on every request.
+# Optional: replace 0.0.0.0/0 with $OFFICE_CIDR to restrict to the PDAX office IP.
 aws ec2 authorize-security-group-ingress \
   --group-id $DASHBOARD_ALB_SG \
   --protocol tcp --port 443 --cidr 0.0.0.0/0
 ```
 
-> **JumpCloud SSO (planned future step)**: When JumpCloud SSO is activated, the ALB's OIDC
-> action becomes the primary access control layer — only users in your JumpCloud org can reach
-> the login page. At that point you can optionally narrow the security group to your office CIDR
-> or keep it at `0.0.0.0/0` (OIDC handles auth). See `docs/JUMPCLOUD_SSO.md` for the activation
-> steps — it requires no code changes, only an env var flip and an ALB listener update.
+> **JumpCloud SSO (planned future step)**: When SSO is activated, the ALB's OIDC authenticator
+> becomes an additional access control layer before login. No code change required — see
+> [docs/JUMPCLOUD_SSO.md](JUMPCLOUD_SSO.md) for the one-time activation steps.
 
-### Receiver ALB SG (Google Pub/Sub IPs)
+### Receiver ALB SG (Google Pub/Sub IPs — WAF-enforced)
+
 ```bash
 RECEIVER_ALB_SG=$(aws ec2 create-security-group \
   --vpc-id $VPC_ID \
@@ -303,15 +358,18 @@ RECEIVER_ALB_SG=$(aws ec2 create-security-group \
   --description "SEGS receiver ALB — Google IPs via WAF" \
   --query 'GroupId' --output text)
 
-# Allow 443 from all IPs — WAF enforces Google-IP restriction
+# Open to all — WAF Web ACL enforces the Google IP restriction
 aws ec2 authorize-security-group-ingress \
   --group-id $RECEIVER_ALB_SG \
   --protocol tcp --port 443 --cidr 0.0.0.0/0
 ```
 
-> **WAF IP set for receiver**: Because Google Cloud publishes 997+ IP ranges (exceeding the 60-rule security group limit), apply restrictions via AWS WAF. Create a WAF Web ACL on the receiver ALB, add an IP set from `deploy/google-pubsub-ips.txt`, and set the default action to BLOCK. Refresh the IP list quarterly.
+> **WAF IP set**: Google publishes 997+ IP ranges — more than the 60-rule SG limit. After creating
+> the receiver ALB, attach a WAF Web ACL with an IP set from `deploy/google-pubsub-ips.txt` and set
+> the default action to BLOCK. Refresh quarterly (see Maintenance section).
 
-### ECS task SGs (private, receive from ALB only)
+### ECS task SGs (private — only accepts traffic from the ALB above)
+
 ```bash
 DASHBOARD_TASK_SG=$(aws ec2 create-security-group \
   --vpc-id $VPC_ID \
@@ -340,36 +398,41 @@ aws ec2 authorize-security-group-ingress \
 
 ## Step 12 — Create ALBs, target groups, and listeners
 
-This step is verbose. Use the AWS Console or Terraform for readability. Key settings:
+Use the AWS Console or Terraform — the CLI commands for ALBs are long. Key settings:
 
-| ALB | Scheme | Subnets | SG | Listener | Protocol |
-|-----|--------|---------|-----|----------|---------|
-| segs-dashboard-alb | internet-facing | Public subnets | `$DASHBOARD_ALB_SG` | 443 HTTPS → TG port 8765 | HTTP/1.1 |
-| segs-receiver-alb | internet-facing | Public subnets | `$RECEIVER_ALB_SG` | 443 HTTPS → TG port 8766 | HTTP/1.1 |
+| ALB | Scheme | Subnets | SG | Listener | Target port |
+|-----|--------|---------|-----|----------|------------|
+| `segs-dashboard-alb` | internet-facing | Public subnets | `$DASHBOARD_ALB_SG` | 443 HTTPS | 8765 |
+| `segs-receiver-alb` | internet-facing | Public subnets | `$RECEIVER_ALB_SG` | 443 HTTPS | 8766 |
 
-Target group health check paths:
-- Dashboard: `GET /api/health` → expect 200
-- Receiver: `GET /health` → expect 200
+**Target group health check paths:**
+- Dashboard: `GET /api/health` — expect HTTP 200
+- Receiver: `GET /health` — expect HTTP 200
 
-Assign the ACM certificates from Step 5 to the respective HTTPS listeners.
+**Assign the ACM certificates** from Step 5 to the respective HTTPS listeners.
+
+**Note the ARNs** — you'll need them in Step 13:
+```bash
+DASHBOARD_TG_ARN=arn:aws:elasticloadbalancing:ap-southeast-1:...:targetgroup/segs-dashboard/...
+RECEIVER_TG_ARN=arn:aws:elasticloadbalancing:ap-southeast-1:...:targetgroup/segs-receiver/...
+```
 
 ---
 
-## Step 13 — Register task definitions and create services
+## Step 13 — Create ECS services (first deploy)
 
 ```bash
 export AWS_ACCOUNT_ID=123456789012
-export EFS_FILESYSTEM_ID=fs-xxxxxxxxx
+export EFS_FILESYSTEM_ID=fs-xxxxxxxxx   # from Step 3
 
-bash deploy/update-service.sh
-```
+# Register task definitions
+aws ecs register-task-definition \
+  --cli-input-json file://ecs/task-definition-dashboard.json
 
-`deploy/update-service.sh` registers both task definitions and then runs `aws ecs create-service` (if not yet created) or `aws ecs update-service --force-new-deployment`. It waits for `services-stable` before exiting.
+aws ecs register-task-definition \
+  --cli-input-json file://ecs/task-definition-receiver.json
 
-If this is the first deploy (services don't exist yet), create them first:
-
-```bash
-# Dashboard service
+# Create services (first deploy only — use update-service.sh for subsequent deploys)
 aws ecs create-service \
   --cluster segs \
   --service-name segs-dashboard \
@@ -379,7 +442,6 @@ aws ecs create-service \
   --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_IDS],securityGroups=[$DASHBOARD_TASK_SG],assignPublicIp=DISABLED}" \
   --load-balancers "targetGroupArn=$DASHBOARD_TG_ARN,containerName=segs-dashboard,containerPort=8765"
 
-# Receiver service
 aws ecs create-service \
   --cluster segs \
   --service-name segs-receiver \
@@ -388,7 +450,15 @@ aws ecs create-service \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_IDS],securityGroups=[$RECEIVER_TASK_SG],assignPublicIp=DISABLED}" \
   --load-balancers "targetGroupArn=$RECEIVER_TG_ARN,containerName=segs-receiver,containerPort=8766"
+
+# Wait until both services are stable (takes 2-3 minutes)
+aws ecs wait services-stable \
+  --cluster segs \
+  --services segs-dashboard segs-receiver
 ```
+
+> **Future deploys**: for code updates, run `bash deploy/update-service.sh` — it re-registers the
+> task definitions with the new image SHA and forces a rolling restart.
 
 ---
 
@@ -398,46 +468,98 @@ Add A records (ALB alias) in Route 53:
 
 | Name | Type | Value |
 |------|------|-------|
-| `segs.pdax.ph` | A (Alias) | segs-dashboard-alb DNS name |
-| `segs-mail.pdax.ph` | A (Alias) | segs-receiver-alb DNS name |
+| `segs.pdax.ph` | A (Alias) | `segs-dashboard-alb` DNS name |
+| `segs-mail.pdax.ph` | A (Alias) | `segs-receiver-alb` DNS name |
 
----
-
-## Step 15 — Configure Pub/Sub push subscription
-
-In GCP Console → Pub/Sub → your topic → Subscriptions:
-
-```
-Delivery type: Push
-Endpoint URL: https://segs-mail.pdax.ph/pubsub
-Authentication: Add authorization header
-  Header name: Authorization
-  Header value: Bearer <SEG_PUBSUB_TOKEN>
-Acknowledgement deadline: 60 seconds
-Retry policy: Retry with exponential backoff (minimum 10s, maximum 600s)
-Message retention: 7 days
-```
-
----
-
-## Step 16 — Register Gmail watches
-
-For each monitored mailbox, trigger a watch registration:
+DNS propagation is near-instant for Route 53 alias records. Verify with:
 
 ```bash
-# From a machine inside the VPN, or via curl through JumpCloud
-curl -X POST https://segs.pdax.ph/watch/security@pdax.ph \
-  -H "Cookie: session=<admin session cookie>" \
+curl -sf https://segs.pdax.ph/api/health && echo "Dashboard reachable"
+curl -sf https://segs-mail.pdax.ph/health && echo "Receiver reachable"
+```
+
+---
+
+## Step 15 — Create the first admin account
+
+**Do this immediately after DNS resolves — before anyone visits the dashboard.** The setup
+endpoint closes permanently after the first account is created.
+
+**Option A — CLI bootstrap (recommended for DevOps)**
+
+```bash
+SEGS_URL=https://segs.pdax.ph \
+SEGS_ADMIN_USER=admin \
+SEGS_ADMIN_PASS='YourStr0ng!Pass' \
+bash deploy/bootstrap_admin.sh
+```
+
+Password rules enforced by the app:
+- Minimum 8 characters
+- At least one uppercase letter (A–Z)
+- At least one lowercase letter (a–z)
+- At least one number (0–9)
+- At least one special character (`!@#$%^&*` etc.)
+
+The script checks setup status first and exits safely if an account already exists.
+
+**Option B — browser**
+
+Visit `https://segs.pdax.ph` — if no admin account exists yet, the login page automatically
+displays a first-admin creation form.
+
+**After creating the admin account:**
+1. Log in to verify the dashboard loads correctly
+2. Go to **Settings → Users** to add analyst and viewer accounts for the SOC team
+3. Keep the enforcement mode on **shadow** (default) for the first two weeks — review the Feed
+   before enabling quarantine
+
+> **Security note**: clear the password from your shell history after running:
+> `history -c` (bash) or `history -p` (zsh)
+
+---
+
+## Step 16 — Configure Pub/Sub push subscription
+
+In GCP Console → Pub/Sub → your topic → Subscriptions → Create subscription:
+
+```
+Delivery type:          Push
+Endpoint URL:           https://segs-mail.pdax.ph/pubsub
+Authentication:         Add authorization header
+  Header name:          Authorization
+  Header value:         Bearer <SEG_PUBSUB_TOKEN>   (same token stored in segs/prod)
+Acknowledgement deadline: 60 seconds
+Retry policy:           Retry with exponential backoff (min 10s, max 600s)
+Message retention:      7 days
+```
+
+---
+
+## Step 17 — Register Gmail watches
+
+Log in to the dashboard, then go to **Settings → Gmail Watches → Register** for each monitored
+mailbox. Or use the API directly:
+
+```bash
+# Log in first to get a session cookie
+LOGIN_RESP=$(curl -s -c /tmp/segs-cookies.txt -X POST https://segs.pdax.ph/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"YourStr0ng!Pass"}')
+echo "$LOGIN_RESP"   # should show {"success": true}
+
+# Register a watch for each mailbox
+curl -s -b /tmp/segs-cookies.txt \
+  -X POST "https://segs.pdax.ph/api/gmail/watch/security@pdax.ph" \
   -H "Content-Type: application/json"
 ```
 
-Or access the dashboard → Settings → Gmail Watches → Register.
-
-The watch auto-renews on every ECS task restart via the lifespan hook in `gateway/gmail_receiver.py`. The EventBridge Lambda provides a daily fallback.
+The watch auto-renews on every ECS task restart (lifespan hook in `gateway/gmail_receiver.py`).
+The EventBridge Lambda in Step 18 provides a daily fallback.
 
 ---
 
-## Step 17 — Deploy Lambda watch renewal fallback
+## Step 18 — Deploy Lambda watch renewal fallback
 
 ```bash
 cd deploy
@@ -471,7 +593,7 @@ aws events put-targets \
 
 ---
 
-## Step 18 — Create CloudWatch alarms
+## Step 19 — Create CloudWatch alarms
 
 ```bash
 SNS_ARN=arn:aws:sns:ap-southeast-1:$AWS_ACCOUNT_ID:segs-alerts
@@ -486,7 +608,7 @@ aws cloudwatch put-metric-alarm \
   --threshold 1 --comparison-operator LessThanThreshold \
   --alarm-actions $SNS_ARN
 
-# Watch renewal failed (log-based)
+# Watch renewal failed (log-based metric)
 aws logs put-metric-filter \
   --log-group-name /segs/receiver \
   --filter-name watch-renewal-failed \
@@ -505,55 +627,55 @@ aws cloudwatch put-metric-alarm \
 
 ---
 
-## Create the first admin account
+## Go-live checklist
 
-Once the ECS service is stable and DNS is resolving, run the bootstrap script to create the first admin. **Do this before anyone visits the dashboard** — the setup endpoint closes permanently after the first account is created.
-
-```bash
-SEGS_URL=https://segs.pdax.ph \
-SEGS_ADMIN_USER=admin \
-SEGS_ADMIN_PASS='YourStr0ng!Pass' \
-bash deploy/bootstrap_admin.sh
-```
-
-Password rules (enforced by the app):
-- At least 8 characters, one uppercase, one lowercase, one number, one special character
-
-The script checks setup status first and exits safely if an account already exists. On success it prints next steps (add more users, register Gmail watches, start in shadow mode).
-
-**Alternatively**, visit `https://segs.pdax.ph` in a browser — if no admin account exists yet, the login form automatically shows a first-admin creation screen.
-
----
-
-## Post-deploy verification
+Run through this after completing all 19 steps:
 
 ```bash
-# 1. Both services stable
+# ── Infrastructure ──────────────────────────────────────────────────────────
+
+# Both ECS services running
 aws ecs describe-services \
   --cluster segs --services segs-dashboard segs-receiver \
   --query 'services[*].[serviceName,runningCount,desiredCount,status]' \
   --output table
+# Expected: 1/1 running, ACTIVE for both
 
-# 2. Health checks passing
-curl -sf https://segs.pdax.ph/api/health && echo OK
-curl -sf https://segs-mail.pdax.ph/health && echo OK
+# Health endpoints
+curl -sf https://segs.pdax.ph/api/health && echo "Dashboard OK"
+curl -sf https://segs-mail.pdax.ph/health && echo "Receiver OK"
 
-# 3. Security headers on dashboard
-curl -I https://segs.pdax.ph/api/health | grep -E "Strict-Transport|X-Frame|Set-Cookie"
+# Security headers present
+curl -sI https://segs.pdax.ph/api/health | grep -E "x-frame-options|strict-transport|x-content"
 
-# 4. Login page reachable (internet-facing — SEGS login is the access control layer)
+# ── Application ─────────────────────────────────────────────────────────────
+
+# Login page reachable
 curl -sf https://segs.pdax.ph/ | grep -q "Sign in" && echo "Login page OK"
 
-# 5. Watch renewal logged on receiver startup
+# Admin account exists (setup should be closed)
+curl -sf https://segs.pdax.ph/api/auth/setup/status | python3 -c \
+  "import json,sys; d=json.load(sys.stdin); print('Setup closed OK' if not d.get('needs_setup') else 'WARNING: no admin account yet')"
+
+# Gmail watch renewal logged at last receiver startup
 aws logs filter-log-events \
+  --region ap-southeast-1 \
   --log-group-name /segs/receiver \
   --filter-pattern "watch renewed" \
-  --start-time $(date -d '1 hour ago' +%s000)
-
-# 6. Send a test phishing email to a monitored mailbox
-# → Gmail should apply SEGS-Quarantine label within 30 seconds
-# → Dashboard feed should show the verdict
+  --start-time $(python3 -c "import time; print(int((time.time()-3600)*1000))")
 ```
+
+**Manual checks (do in a browser):**
+- [ ] Log in to `https://segs.pdax.ph` with the admin account
+- [ ] Dashboard Feed page loads without errors
+- [ ] Settings → Users shows the admin account
+- [ ] Settings → Gmail Watches shows watches registered for each monitored mailbox
+- [ ] Send a test email to a monitored mailbox — it should appear in the Feed within 30 seconds
+
+**After two weeks in shadow mode:**
+- [ ] Review the Feed — confirm low false-positive rate
+- [ ] Enable quarantine: in the dashboard go to **Settings → Enforcement → Quarantine**
+  (or update `SEG_ENFORCE=quarantine` in Secrets Manager and run `bash deploy/update-service.sh`)
 
 ---
 
@@ -562,36 +684,48 @@ aws logs filter-log-events \
 ### Deploying a code update
 
 ```bash
-bash deploy/push-images.sh        # rebuild + push
-bash deploy/update-service.sh     # register new task def + force deploy
+bash deploy/push-images.sh        # rebuild + push new images to ECR
+bash deploy/update-service.sh     # register new task definitions + rolling restart
 ```
 
-### Rotating a secret
+### Rotating a secret (e.g. an API key)
 
 ```bash
-AWS_ACCOUNT_ID=123456789012 bash deploy/setup-secrets.sh
-bash deploy/update-service.sh     # restart tasks to pick up new secret
+# Update the value in Secrets Manager
+aws secretsmanager put-secret-value \
+  --region ap-southeast-1 \
+  --secret-id segs/prod \
+  --secret-string "$(aws secretsmanager get-secret-value \
+    --region ap-southeast-1 --secret-id segs/prod \
+    --query SecretString --output text \
+    | python3 -c "import json,sys; d=json.load(sys.stdin); d['SEG_VT_API_KEY']='NEW_KEY'; print(json.dumps(d))")"
+
+# Restart containers to pick up the new value
+bash deploy/update-service.sh
 ```
+
+### Adding a user account
+
+Log in to the dashboard → **Settings → Users → Add User**. Roles:
+- **Admin**: full access (users, settings, policy, all actions)
+- **Analyst**: view feed, release/block quarantine
+- **Viewer**: read-only feed
 
 ### Scaling
 
 ```bash
-# Scale dashboard service
+# Scale the dashboard service (the receiver rarely needs > 1 task)
 aws ecs update-service \
-  --cluster segs --service segs-dashboard \
-  --desired-count 2
-
-# Receiver does not benefit from multiple tasks unless Pub/Sub
-# delivery rate exceeds single-task capacity.
+  --cluster segs --service segs-dashboard --desired-count 2
 ```
 
-### Refreshing Google IP list for WAF
+### Refreshing Google IP list for WAF (quarterly)
 
 ```bash
 curl -s https://www.gstatic.com/ipranges/cloud.json \
   | python3 -c "import json,sys; [print(p['ipv4Prefix']) for p in json.load(sys.stdin)['prefixes'] if 'ipv4Prefix' in p]" \
   > deploy/google-pubsub-ips.txt
-# Then update the WAF IP set in the Console or via aws wafv2 update-ip-set
+# Then update the WAF IP set: AWS Console → WAF → IP sets → segs-google-ips → Edit
 ```
 
-Refresh quarterly. Google publishes changes at `https://www.gstatic.com/ipranges/cloud-services.json` (change notification feed).
+Google publishes change notifications at `https://www.gstatic.com/ipranges/cloud-services.json`.

@@ -3187,35 +3187,58 @@
         if (!headers[k]) { headers[k] = v; order.push(k); }
       }
     }
-    // Detect multipart and extract text/plain
-    var ct = headers["content-type"] || "";
-    var boundary = (ct.match(/boundary=["']?([^"';\r\n]+)["']?/i) || [])[1];
-    var bodyText = "";
-    var attachments = [];
-    if (boundary) {
-      var parts = bodyRaw.split(new RegExp("--" + boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:--)?"));
-      for (var p = 1; p < parts.length; p++) {
-        var psep = parts[p].indexOf(nl + nl);
-        var phdr = psep === -1 ? parts[p] : parts[p].slice(0, psep);
-        var pbdy = psep === -1 ? "" : parts[p].slice(psep + nl.length * 2);
-        var pct = (phdr.match(/content-type:\s*([^\r\n;]+)/i) || [])[1] || "";
-        var pcd = (phdr.match(/content-disposition:\s*([^\r\n;]+)/i) || [])[1] || "";
+    // Recursively extract text/plain from potentially nested multipart MIME structure.
+    // Handles multipart/mixed → multipart/alternative → text/plain chains which are
+    // the standard structure for Gmail/Outlook emails that have attachments.
+    function extractFromMime(body, ct, cte) {
+      var boundary = ((ct.match(/boundary=["']?([^"';\r\n]+)["']?/i) || [])[1] || "").trim();
+      if (!boundary) {
+        var decoded = decodeTransferEncoding(body, cte);
+        var ctMain = ct.split(";")[0].trim().toLowerCase();
+        var isHtml = ctMain === "text/html";
+        return {
+          plain: isHtml ? "" : decoded,
+          htmlFallback: (isHtml && decoded.trim()) ? "[HTML body — plain text not available]" : "",
+          atts: []
+        };
+      }
+      var esc = boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var parts = body.split(new RegExp("--" + esc + "(?:--)?"));
+      var plain = "";
+      var htmlFb = "";
+      var atts = [];
+      // parts[0] = preamble, parts[length-1] = epilogue/remainder — skip both
+      for (var p = 1; p < parts.length - 1; p++) {
+        var ps = parts[p].indexOf(nl + nl);
+        if (ps === -1) continue;
+        var phdr = parts[p].slice(0, ps);
+        var pbdy = parts[p].slice(ps + nl.length * 2);
+        var pct = ((phdr.match(/content-type:\s*([^\r\n]+)/i) || [])[1] || "").trim();
+        var pctMain = pct.split(";")[0].trim().toLowerCase();
+        var pcd = ((phdr.match(/content-disposition:\s*([^\r\n;]+)/i) || [])[1] || "").trim().toLowerCase();
         var pcte = ((phdr.match(/content-transfer-encoding:\s*([^\r\n]+)/i) || [])[1] || "").trim().toLowerCase();
-        var pname = (phdr.match(/(?:name|filename)=["']?([^"';\r\n]+)["']?/i) || [])[1] || "";
-        if (/text\/plain/i.test(pct)) {
-          if (!bodyText) bodyText = decodeTransferEncoding(pbdy, pcte);
-        } else if (/text\/html/i.test(pct)) {
-          if (!bodyText) bodyText = "[HTML body — plain text not available]";
-        } else if (pcd.toLowerCase().indexOf("attachment") !== -1 || pname) {
-          attachments.push(pname || pct.trim());
+        var pname = ((phdr.match(/(?:name|filename)\*?=["']?([^"';\r\n]+)["']?/i) || [])[1] || "").trim();
+        if (pctMain === "text/plain") {
+          if (!plain) plain = decodeTransferEncoding(pbdy, pcte);
+        } else if (pctMain === "text/html") {
+          if (!htmlFb) htmlFb = "[HTML body — plain text not available]";
+        } else if (pctMain.indexOf("multipart/") === 0) {
+          // Recurse into nested multipart (e.g. multipart/alternative inside multipart/mixed)
+          var sub = extractFromMime(pbdy, pct, "");
+          if (!plain && sub.plain) plain = sub.plain;
+          if (!htmlFb && sub.htmlFallback) htmlFb = sub.htmlFallback;
+          atts = atts.concat(sub.atts);
+        } else if (pcd.indexOf("attachment") !== -1 || pname) {
+          atts.push(pname || pctMain);
         }
       }
-    } else {
-      var cte = ((headers["content-transfer-encoding"] || "")).trim().toLowerCase();
-      bodyText = decodeTransferEncoding(bodyRaw, cte);
-      if (/text\/html/i.test(ct) && !bodyText.trim()) bodyText = "[HTML body]";
+      return { plain: plain, htmlFallback: htmlFb, atts: atts };
     }
-    return { headers: headers, order: order, body: bodyText.trim(), attachments: attachments };
+    var ct = headers["content-type"] || "";
+    var cte = (headers["content-transfer-encoding"] || "").trim().toLowerCase();
+    var result = extractFromMime(bodyRaw, ct, cte);
+    var body = (result.plain || result.htmlFallback).trim();
+    return { headers: headers, order: order, body: body, attachments: result.atts };
   }
 
   function decodeTransferEncoding(text, enc) {
@@ -3226,9 +3249,10 @@
       } catch(e) { return text; }
     }
     if (enc === "quoted-printable") {
-      return text
+      var qp = text
         .replace(/=\r?\n/g, "")
         .replace(/=([0-9A-Fa-f]{2})/g, function(_, h) { return String.fromCharCode(parseInt(h, 16)); });
+      try { return decodeURIComponent(escape(qp)); } catch(e) { return qp; }
     }
     return text;
   }

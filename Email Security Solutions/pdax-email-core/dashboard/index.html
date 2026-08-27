@@ -509,6 +509,15 @@
     background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
     white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--ink-secondary);
   }
+  .eml-content-details { margin: 6px 0 10px; }
+  .eml-content-details summary {
+    cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-secondary);
+    padding: 5px 0; user-select: none; list-style: none;
+  }
+  .eml-content-details summary::-webkit-details-marker { display: none; }
+  .eml-content-details summary::before { content: "▶ "; font-size: 10px; opacity: .6; }
+  .eml-content-details[open] summary::before { content: "▼ "; }
+  .eml-content-pre { max-height: 300px; margin-top: 8px; font-size: 11px; }
   .analyze-denied {
     padding: 18px; border-radius: var(--radius-sm); background: var(--surface-2);
     border: 1px solid var(--border); color: var(--ink-muted);
@@ -967,6 +976,13 @@
             <div class="card-head"><div><h2>Indicators</h2><div class="card-sub">Threat signals called out by the LLM agent</div></div></div>
             <ul class="finding-list" id="analyzeIndicators"></ul>
           </div>
+          <div class="card" id="analyzeEmailContentCard" style="display:none;">
+            <div class="card-head">
+              <div><h2>Email content</h2><div class="card-sub">Raw EML — headers and body as received</div></div>
+              <button type="button" class="btn btn-sm" id="analyzeToggleEml">Collapse</button>
+            </div>
+            <pre class="report-pre" id="analyzeEmailContent"></pre>
+          </div>
           <div class="card">
             <div class="card-head">
               <div><h2>Full Markdown report</h2><div class="card-sub">Escaped text — advisory only</div></div>
@@ -1322,7 +1338,7 @@
   var ICON = {
     good: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>',
-    serious: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L14.7 3.86a2 2 0 00-3.4 0z"/></svg>',
+    serious: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L14.7 3.86a2 2 0 00-3.4 0z"/></svg>',
     critical: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
     wazuh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 11-14h-7l1-6z"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4"/><path d="M4 19h16"/></svg>',
@@ -2198,11 +2214,18 @@
             (count && !isNaN(Number(count)) ? '<span style="opacity:.65;font-size:11px;">' + count + ' occurrence' + (Number(count) === 1 ? "" : "s") + '</span>' : '') +
             '</div>';
         }).join("");
-        html += '<div class="drawer-field"><div style="padding:10px 12px;border-radius:8px;background:var(--status-serious-bg);color:var(--status-serious);">' +
+        html += '<div class="drawer-field"><div style="padding:10px 12px;border-radius:8px;background:var(--status-serious-bg);color:var(--status-serious);max-width:480px;width:100%;flex-shrink:0;">' +
           '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin-bottom:' + (drawerSuspicious.length ? "6" : "0") + 'px;">' +
           ICON.serious + '<span>Behavioral Anomaly — ' + drawerSuspicious.length + ' pattern' + (drawerSuspicious.length === 1 ? "" : "s") + ' detected</span></div>' +
           suspRows + '</div></div>';
       }
+    }
+
+    if (e.queueId) {
+      html += '<details class="eml-content-details">' +
+        '<summary>Email content <span style="font-weight:400;font-size:11px;color:var(--ink-muted);">— click to expand</span></summary>' +
+        '<pre class="report-pre eml-content-pre" id="fw-eml-' + escapeHtml(e.id) + '">Loading…</pre>' +
+        '</details>';
     }
 
     html += '<div class="drawer-field"><span class="df-label">IOCs</span>' +
@@ -2264,6 +2287,23 @@
   function populateFloatWindow(win, e) {
     win.querySelector(".fw-subject").textContent = e.subject || "(no subject)";
     win.querySelector(".fw-body").innerHTML = buildPreviewBodyHtml(e);
+
+    if (e.queueId) {
+      var emlDetails = win.querySelector(".eml-content-details");
+      var emlPre = emlDetails && win.querySelector("#fw-eml-" + e.id);
+      if (emlDetails && emlPre) {
+        var loaded = false;
+        emlDetails.addEventListener("toggle", function () {
+          if (!emlDetails.open || loaded) return;
+          loaded = true;
+          fetch("/api/quarantine/" + encodeURIComponent(e.queueId) + "/download")
+            .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+            .then(function (text) { emlPre.textContent = text; })
+            .catch(function (err) { emlPre.textContent = "Could not load EML content (" + err + ")."; });
+        });
+      }
+    }
+
     var foot = win.querySelector(".fw-foot");
     foot.innerHTML = buildPreviewFootHtml(e);
     var copyBtn = foot.querySelector('[data-fw-action="copy"]');
@@ -2509,6 +2549,7 @@
 
   /* ============================== ANALYZE (EML UPLOAD) ============================== */
   var analyzeFile = null;
+  var analyzeRawEml = "";
   var analyzeTimer = null;
   var analyzeAbort = null;
   var _behavModalData = [];
@@ -2559,6 +2600,7 @@
 
   function setAnalyzeFile(file) {
     analyzeFile = file || null;
+    analyzeRawEml = "";
     var dz = document.getElementById("analyzeDropzone");
     var label = document.getElementById("analyzeFileLabel");
     var btn = document.getElementById("analyzeBtn");
@@ -2566,6 +2608,9 @@
       dz.classList.add("has-file");
       label.textContent = analyzeFile.name + " · " + (analyzeFile.size / 1024).toFixed(1) + " KB";
       btn.disabled = !canAct();
+      var reader = new FileReader();
+      reader.onload = function (ev) { analyzeRawEml = ev.target.result || ""; };
+      reader.readAsText(analyzeFile);
     } else {
       dz.classList.remove("has-file");
       label.textContent = "";
@@ -3266,6 +3311,18 @@
     document.getElementById("analyzeMarkdown").textContent = data.markdown || "";
     document.getElementById("analyzeMarkdown").style.display = "block";
     document.getElementById("analyzeToggleMd").textContent = "Collapse";
+
+    var emlContentCard = document.getElementById("analyzeEmailContentCard");
+    var emlContentPre = document.getElementById("analyzeEmailContent");
+    if (analyzeRawEml) {
+      emlContentPre.textContent = analyzeRawEml;
+      emlContentPre.style.display = "block";
+      document.getElementById("analyzeToggleEml").textContent = "Collapse";
+      emlContentCard.style.display = "";
+    } else {
+      emlContentCard.style.display = "none";
+    }
+
     document.getElementById("analyzeResults").classList.add("show");
   }
 
@@ -3511,6 +3568,12 @@
     document.getElementById("analyzeBtn").addEventListener("click", runAnalyze);
     document.getElementById("analyzeToggleMd").addEventListener("click", function () {
       var pre = document.getElementById("analyzeMarkdown");
+      var hide = pre.style.display !== "none";
+      pre.style.display = hide ? "none" : "block";
+      this.textContent = hide ? "Expand" : "Collapse";
+    });
+    document.getElementById("analyzeToggleEml").addEventListener("click", function () {
+      var pre = document.getElementById("analyzeEmailContent");
       var hide = pre.style.display !== "none";
       pre.style.display = hide ? "none" : "block";
       this.textContent = hide ? "Expand" : "Collapse";

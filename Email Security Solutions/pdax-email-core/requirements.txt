@@ -20,7 +20,7 @@ google-api-python-client>=2.100.0  # Gmail API (users.messages, users.watch)
 google-auth>=2.0                   # Service-account impersonation / DWD
 
 # Enrichment providers (only needed when you wire the real stages):
-# boto3                     # Stage 5 BedrockProvider (Claude, ap-southeast-1) — set SEG_CONTENT_PROVIDER=bedrock
+boto3>=1.34               # S3 log shipper (Wazuh/SIEM integration) + BedrockProvider (SEG_CONTENT_PROVIDER=bedrock)
 # google-genai               # Stage 5 GeminiProvider (Google AI Studio) — set SEG_CONTENT_PROVIDER=gemini
 #                             # NOTE: no region pinning, needs DPO sign-off under RA 10173 before real mail (see content_ai.py)
 openai                      # Stage 5 GLMProvider (Zhipu/Z.ai GLM via Vertex AI Model Garden MaaS) — set SEG_CONTENT_PROVIDER=glm

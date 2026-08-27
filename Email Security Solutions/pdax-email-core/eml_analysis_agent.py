@@ -541,7 +541,8 @@ def _md_table(rows: list[list[str]], headers: list[str]) -> str:
     return "\n".join(out) + "\n"
 
 
-def render_markdown(eml_path: Path, analysis: dict, playbook: dict = None) -> str:
+def render_markdown(eml_path: Path, analysis: dict, playbook: dict = None,
+                    model_id: str | None = None) -> str:
     meta = analysis.get("metadata", {})
     auth = analysis.get("authentication_forensics", {})
     content = analysis.get("content_analysis", {})
@@ -553,12 +554,13 @@ def render_markdown(eml_path: Path, analysis: dict, playbook: dict = None) -> st
     actions = _normalize_list_items(analysis.get("recommended_actions") or [])
 
     classification = threat.get("classification") or "Unknown"
+    _model_label = model_id or os.environ.get("SEG_GLM_MODEL_ID", "zai-org/glm-4.7-maas")
     lines = [
         f"# Email Analysis Report — {meta.get('subject') or '(no subject)'}",
         "",
         f"**Source file:** `{eml_path.name}`  ",
         f"**Analyzed:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}  ",
-        "**Model:** GLM (zai-org/glm-4.7-maas) via Google Cloud Vertex AI Model Garden",
+        f"**Model:** {_model_label} via Google Cloud Vertex AI Model Garden",
         "",
         "## Verdict",
         "",
@@ -841,7 +843,7 @@ def analyze_eml_bytes(
         analysis = _normalize_analysis(analysis)
         playbook = parsed.get("playbook")
         ensure_classification(analysis, playbook)
-        markdown = render_markdown(eml_path, analysis, playbook)
+        markdown = render_markdown(eml_path, analysis, playbook, model_id=provider.model_id)
         threat = analysis.get("threat_assessment") or {}
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
         return {

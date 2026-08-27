@@ -31,6 +31,7 @@ from .routers import lists as lists_router
 from .routers import slack_config as slack_config_router
 from .routers import notify_config as notify_config_router
 from .security import MaxBodySizeMiddleware, SecurityHeadersMiddleware, SSOMiddleware
+from . import wazuh_shipper
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DASHBOARD_DIR = _ROOT / "dashboard"
@@ -77,6 +78,7 @@ async def _lifespan(app: FastAPI):
     cs = correlation_mod.get_default_store()
     deps.set_correlation_store(cs)
     feed_builder.build_feed(correlation_store=cs)
+    wazuh_shipper.start_shipper()
     yield
 
 

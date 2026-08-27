@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in — Secure Email Gateway</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ctext y='20' font-size='20'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="/logo.png" type="image/png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
@@ -45,10 +45,9 @@
   .brand-lockup { display: flex; align-items: center; gap: 12px; margin: 0 2px 22px; }
   .brand-mark {
     width: 40px; height: 40px; border-radius: 12px;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    display: grid; place-items: center; flex: none; box-shadow: var(--shadow);
+    overflow: hidden; flex: none; box-shadow: var(--shadow);
   }
-  .brand-mark svg { width: 20px; height: 20px; color: #fff; }
+  .brand-mark img { width: 40px; height: 40px; object-fit: contain; display: block; }
   .brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
   .brand-sub { font-size: 11px; color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; font-weight: 500; }
   .card {
@@ -81,9 +80,7 @@
   <div class="wrap">
     <div class="brand-lockup">
       <div class="brand-mark">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7l9 6 9-6" /><rect x="3" y="5" width="18" height="14" rx="2" />
-        </svg>
+        <img src="/logo.png" alt="SEGS logo" width="40" height="40" />
       </div>
       <div>
         <div class="brand-name" id="brandName">Secure Email Gateway Service (SEGS)</div>

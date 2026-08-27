@@ -30,7 +30,7 @@ from .routers import enforcement as enforcement_router
 from .routers import lists as lists_router
 from .routers import slack_config as slack_config_router
 from .routers import notify_config as notify_config_router
-from .security import MaxBodySizeMiddleware, SecurityHeadersMiddleware
+from .security import MaxBodySizeMiddleware, SecurityHeadersMiddleware, SSOMiddleware
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DASHBOARD_DIR = _ROOT / "dashboard"
@@ -99,6 +99,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+# JumpCloud SSO gate (no-op when SEG_SSO_PROVIDER is unset; see docs/JUMPCLOUD_SSO.md).
+app.add_middleware(SSOMiddleware)
 
 # Security response headers on every reply.
 app.add_middleware(SecurityHeadersMiddleware)

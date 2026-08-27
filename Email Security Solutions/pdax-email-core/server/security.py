@@ -201,3 +201,52 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             if h in response.headers:
                 del response.headers[h]
         return response
+
+
+# ---------------------------------------------------------------------------
+# SSO middleware — JumpCloud SSO readiness hook
+# ---------------------------------------------------------------------------
+
+_SSO_PROVIDER = os.getenv("SEG_SSO_PROVIDER", "").strip().lower()
+
+# Paths that must remain reachable without SSO:
+#   /api/health       — ALB health check (runs before any session exists)
+#   /api/auth/*       — login, setup wizard, logout (bootstrapping)
+_SSO_BYPASS_PREFIXES = ("/api/health", "/api/auth/")
+
+
+class SSOMiddleware(BaseHTTPMiddleware):
+    """JumpCloud SSO gate.
+
+    Controlled by SEG_SSO_PROVIDER (empty = disabled):
+
+      alb_oidc  — Trust the x-amzn-oidc-identity header injected by the AWS
+                  ALB OIDC authenticator after it validates the JumpCloud token.
+                  The ALB does the heavy lifting; this middleware just rejects
+                  any request that bypassed the ALB (i.e. the header is absent).
+
+    When SEG_SSO_PROVIDER is empty or unset, this middleware is a no-op and all
+    traffic falls through to the app's own session-cookie auth.
+
+    To activate: set SEG_SSO_PROVIDER=alb_oidc in Secrets Manager + redeploy,
+    and configure the ALB OIDC listener rule as described in docs/JUMPCLOUD_SSO.md.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if not _SSO_PROVIDER:
+            return await call_next(request)
+
+        path = request.url.path
+        for prefix in _SSO_BYPASS_PREFIXES:
+            if path.startswith(prefix):
+                return await call_next(request)
+
+        if _SSO_PROVIDER == "alb_oidc":
+            if not request.headers.get("x-amzn-oidc-identity"):
+                return Response(
+                    content="Access denied — authenticate via the organization SSO portal.",
+                    status_code=401,
+                    headers={"WWW-Authenticate": 'Bearer realm="SEGS"'},
+                )
+
+        return await call_next(request)

@@ -10,7 +10,7 @@
 | Existing PDAX VPC | ap-southeast-1, with private and public subnets in ≥2 AZs |
 | Route 53 hosted zone for `pdax.ph` | Or equivalent DNS admin access |
 | GCP project with Pub/Sub + service account | See [docs/GMAIL_API_SETUP.md](GMAIL_API_SETUP.md) |
-| JumpCloud VPN CIDR | The CIDR block(s) SOC analysts connect from |
+| JumpCloud SSO | **Planned future step** — not required for initial deployment. See [docs/JUMPCLOUD_SSO.md](JUMPCLOUD_SSO.md). |
 
 ---
 
@@ -23,9 +23,9 @@ Collect these before starting. Nothing is hardcoded — all values go into Secre
 AWS_ACCOUNT_ID=<12-digit account ID>
 AWS_REGION=ap-southeast-1
 VPC_ID=vpc-xxxxxxxx
-PRIVATE_SUBNET_IDS=subnet-aaaa,subnet-bbbb    # ≥2 AZs, for dashboard + ECS tasks
-PUBLIC_SUBNET_IDS=subnet-cccc,subnet-dddd     # ≥2 AZs, for receiver ALB
-VPN_CIDR=10.8.0.0/16                          # JumpCloud VPN CIDR
+PRIVATE_SUBNET_IDS=subnet-aaaa,subnet-bbbb    # ≥2 AZs, for ECS tasks (private, no public IP)
+PUBLIC_SUBNET_IDS=subnet-cccc,subnet-dddd     # ≥2 AZs, for both ALBs (internet-facing)
+OFFICE_CIDR=x.x.x.x/32                        # Optional: PDAX office public IP for extra SG restriction
 ```
 
 **Domains (request ACM certs via DNS validation in Route 53)**
@@ -274,18 +274,26 @@ This builds both images, tags them with the current Git SHA and `latest`, and pu
 
 ## Step 11 — Create security groups
 
-### Dashboard ALB SG (VPN-only HTTPS)
+### Dashboard ALB SG (internet-facing HTTPS — login is the access control layer)
 ```bash
 DASHBOARD_ALB_SG=$(aws ec2 create-security-group \
   --vpc-id $VPC_ID \
   --group-name segs-dashboard-alb \
-  --description "SEGS dashboard ALB — VPN only" \
+  --description "SEGS dashboard ALB — internet-facing" \
   --query 'GroupId' --output text)
 
+# Allow HTTPS from anywhere — SEGS login + rate limiting is the access control layer.
+# Optional: restrict to your office IP range instead (replace 0.0.0.0/0 with $OFFICE_CIDR).
 aws ec2 authorize-security-group-ingress \
   --group-id $DASHBOARD_ALB_SG \
-  --protocol tcp --port 443 --cidr $VPN_CIDR
+  --protocol tcp --port 443 --cidr 0.0.0.0/0
 ```
+
+> **JumpCloud SSO (planned future step)**: When JumpCloud SSO is activated, the ALB's OIDC
+> action becomes the primary access control layer — only users in your JumpCloud org can reach
+> the login page. At that point you can optionally narrow the security group to your office CIDR
+> or keep it at `0.0.0.0/0` (OIDC handles auth). See `docs/JUMPCLOUD_SSO.md` for the activation
+> steps — it requires no code changes, only an env var flip and an ALB listener update.
 
 ### Receiver ALB SG (Google Pub/Sub IPs)
 ```bash
@@ -336,7 +344,7 @@ This step is verbose. Use the AWS Console or Terraform for readability. Key sett
 
 | ALB | Scheme | Subnets | SG | Listener | Protocol |
 |-----|--------|---------|-----|----------|---------|
-| segs-dashboard-alb | internal | Private subnets | `$DASHBOARD_ALB_SG` | 443 HTTPS → TG port 8765 | HTTP/1.1 |
+| segs-dashboard-alb | internet-facing | Public subnets | `$DASHBOARD_ALB_SG` | 443 HTTPS → TG port 8765 | HTTP/1.1 |
 | segs-receiver-alb | internet-facing | Public subnets | `$RECEIVER_ALB_SG` | 443 HTTPS → TG port 8766 | HTTP/1.1 |
 
 Target group health check paths:
@@ -497,6 +505,26 @@ aws cloudwatch put-metric-alarm \
 
 ---
 
+## Create the first admin account
+
+Once the ECS service is stable and DNS is resolving, run the bootstrap script to create the first admin. **Do this before anyone visits the dashboard** — the setup endpoint closes permanently after the first account is created.
+
+```bash
+SEGS_URL=https://segs.pdax.ph \
+SEGS_ADMIN_USER=admin \
+SEGS_ADMIN_PASS='YourStr0ng!Pass' \
+bash deploy/bootstrap_admin.sh
+```
+
+Password rules (enforced by the app):
+- At least 8 characters, one uppercase, one lowercase, one number, one special character
+
+The script checks setup status first and exits safely if an account already exists. On success it prints next steps (add more users, register Gmail watches, start in shadow mode).
+
+**Alternatively**, visit `https://segs.pdax.ph` in a browser — if no admin account exists yet, the login form automatically shows a first-admin creation screen.
+
+---
+
 ## Post-deploy verification
 
 ```bash
@@ -506,15 +534,15 @@ aws ecs describe-services \
   --query 'services[*].[serviceName,runningCount,desiredCount,status]' \
   --output table
 
-# 2. Health checks passing (from within VPN)
+# 2. Health checks passing
 curl -sf https://segs.pdax.ph/api/health && echo OK
 curl -sf https://segs-mail.pdax.ph/health && echo OK
 
 # 3. Security headers on dashboard
 curl -I https://segs.pdax.ph/api/health | grep -E "Strict-Transport|X-Frame|Set-Cookie"
 
-# 4. Dashboard blocked without VPN (run from outside network)
-# Should timeout or return 403
+# 4. Login page reachable (internet-facing — SEGS login is the access control layer)
+curl -sf https://segs.pdax.ph/ | grep -q "Sign in" && echo "Login page OK"
 
 # 5. Watch renewal logged on receiver startup
 aws logs filter-log-events \

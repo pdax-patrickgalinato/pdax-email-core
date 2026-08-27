@@ -155,6 +155,21 @@ These are not SEGS application variables — they're used by the deployment scri
 
 ---
 
+## JumpCloud SSO (planned future — disabled by default)
+
+The platform is SSO-ready. The `SSOMiddleware` in `server/security.py` reads `SEG_SSO_PROVIDER` at startup. When empty (the default), the middleware is a no-op and the platform uses its own session-cookie login. Set to `alb_oidc` to activate the JumpCloud SSO gate with no code changes.
+
+| Variable | Description |
+|----------|-------------|
+| `SEG_SSO_PROVIDER` | Set to `alb_oidc` to require an AWS ALB OIDC token (JumpCloud). Empty = disabled (default). |
+| `SEG_OIDC_CLIENT_ID` | JumpCloud OIDC app Client ID — the ALB listener uses this directly; stored here for documentation. |
+| `SEG_OIDC_CLIENT_SECRET` | JumpCloud OIDC app Client Secret — same note. |
+| `SEG_OIDC_ISSUER` | JumpCloud OIDC discovery base URL (`https://oauth.id.jumpcloud.com`). |
+
+All four are stored as comments in `.env.example` and become active entries in `segs/prod` Secrets Manager when SSO is enabled. See `docs/JUMPCLOUD_SSO.md` for the full activation walkthrough.
+
+---
+
 ## Environment variable load order
 
 For local development (`.env` file):

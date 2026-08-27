@@ -80,9 +80,11 @@ Sender → Postfix/Rspamd (SEGS)
 ```
 ┌─────────────────────────────── AWS (ap-southeast-1) ───────────────────────────────┐
 │                                                                                     │
-│  Internal ALB                        Internet-facing ALB                           │
+│  Internet-facing ALB                 Internet-facing ALB                          │
 │  segs.pdax.ph                        segs-mail.pdax.ph                            │
-│  (VPN-only, dashboard)               (Google IPs only, receiver)                  │
+│  (dashboard, SEGS login + rate-      (Google IPs only, receiver)                  │
+│   limiting = access control;         (future: JumpCloud SSO via ALB OIDC)         │
+│   future: JumpCloud SSO via ALB OIDC)                                             │
 │         │                                   │                                      │
 │         ▼                                   ▼                                      │
 │  ECS Fargate                          ECS Fargate                                  │

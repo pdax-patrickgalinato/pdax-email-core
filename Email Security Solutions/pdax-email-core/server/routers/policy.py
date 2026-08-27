@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from .. import activity_log
 from ..auth_store import User
 from ..deps import require_role
+from ..security import admin_write_limiter
 from app.pipeline import policy as policy_mod
 
 router = APIRouter(prefix="/api")
@@ -92,6 +93,8 @@ def _rewrite_category_enabled(text: str, category: str, enabled: bool) -> str:
 
 @router.put("/policy")
 def put_policy(body: PolicyUpdate, admin: User = Depends(require_role("admin"))):
+    if admin_write_limiter.is_limited(admin.username):
+        raise HTTPException(status_code=429, detail="Too many policy changes — wait one minute and retry")
     if body.category not in policy_mod.ALL_CATEGORIES:
         raise HTTPException(status_code=422, detail=f"unknown category: {body.category!r}")
     if not _POLICY_PATH.is_file():
@@ -101,7 +104,10 @@ def put_policy(body: PolicyUpdate, admin: User = Depends(require_role("admin")))
     try:
         updated = _rewrite_category_enabled(original, body.category, body.enabled)
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log the full error server-side; never return filesystem paths to the client.
+        import logging as _logging
+        _logging.getLogger(__name__).error("policy rewrite error: %s", e)
+        raise HTTPException(status_code=500, detail="Policy update failed — category entry not found in rules/policy.yaml")
 
     # Validate the rewrite actually parses to the intended value before
     # writing — never leave the file in a state where the regex "succeeded"

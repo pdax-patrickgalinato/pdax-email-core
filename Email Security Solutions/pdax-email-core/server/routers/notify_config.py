@@ -60,8 +60,8 @@ def _write_config(cfg: dict, actor: str) -> None:
         f"smtp_user: {cfg['smtp_user']!r}\n"
         f"from_addr: {cfg['from_addr']!r}\n"
         f"threshold: {cfg['threshold']}\n"
-        f"updated_by: {actor}\n"
-        f"updated_at: \"{now}\"\n",
+        f'updated_by: "{actor}"\n'
+        f'updated_at: "{now}"\n',
         encoding="utf-8",
     )
 

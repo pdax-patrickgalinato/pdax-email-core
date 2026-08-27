@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Protocol
+
+_SAFE_QUEUE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,128}$')
 
 import yaml
 
@@ -299,6 +302,8 @@ def apply_disposition(result: PipelineResult,
 def _find_spool_entry(root: Path, queue_id: str,
                       buckets=("quarantine", "rejected", "released")) -> Path:
     """Locate a spool entry by exact id or prefix across buckets."""
+    if not _SAFE_QUEUE_ID_RE.match(queue_id or ""):
+        raise ValueError(f"Invalid queue_id — must match [a-zA-Z0-9_-]{{1,128}}: {queue_id!r}")
     root = Path(root)
     for bucket in buckets:
         base = root / bucket

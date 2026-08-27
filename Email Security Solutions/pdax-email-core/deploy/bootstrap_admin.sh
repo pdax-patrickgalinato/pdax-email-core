@@ -50,24 +50,39 @@ fi
 
 echo "==> Creating admin account '$SEGS_ADMIN_USER' ..."
 
-HTTP_CODE=$(curl -s -o /tmp/segs_bootstrap_out.json -w "%{http_code}" \
+# Build JSON body using Python to ensure correct quoting and escaping.
+# The old approach used json.dumps then tr -d '"' which stripped the required
+# surrounding quotes, producing syntactically invalid JSON for most passwords.
+BODY=$(python3 -c "
+import json, sys
+username = sys.argv[1]
+password = sys.argv[2]
+print(json.dumps({'username': username, 'password': password}))
+" "$SEGS_ADMIN_USER" "$SEGS_ADMIN_PASS")
+
+# Write curl output to a mode-600 temp file to avoid world-readable /tmp exposure.
+BOOTSTRAP_TMP=$(mktemp)
+chmod 600 "$BOOTSTRAP_TMP"
+
+HTTP_CODE=$(curl -s -o "$BOOTSTRAP_TMP" -w "%{http_code}" \
     --max-time 15 \
     -X POST "$SEGS_URL/api/auth/setup" \
     -H "Content-Type: application/json" \
-    -d "{\"username\":\"$(echo "$SEGS_ADMIN_USER" | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().strip()))" | tr -d '\"')\",\"password\":\"$(echo "$SEGS_ADMIN_PASS" | python3 -c "import json,sys; print(json.dumps(sys.stdin.read().strip()))" | tr -d '\"')\"}" \
+    -d "$BODY" \
     2>/dev/null)
 
 if [ "$HTTP_CODE" = "200" ]; then
+    rm -f "$BOOTSTRAP_TMP"
     echo ""
-    echo "✓ Admin account created successfully."
+    echo "Admin account created successfully."
     echo ""
     echo "  Dashboard: $SEGS_URL"
     echo "  Username:  $SEGS_ADMIN_USER"
     echo ""
     echo "Next steps:"
     echo "  1. Log in and verify the dashboard loads correctly"
-    echo "  2. Add SOC analyst accounts: Settings → Users → Add User"
-    echo "  3. Register Gmail watches: Settings → Gmail Watches → Register"
+    echo "  2. Add SOC analyst accounts: Settings -> Users -> Add User"
+    echo "  3. Register Gmail watches: Settings -> Gmail Watches -> Register"
     echo "  4. Start in shadow mode — review the Feed for 2 weeks before enabling quarantine"
     echo ""
     echo "Security note: clear SEGS_ADMIN_PASS from your shell history:"
@@ -76,7 +91,8 @@ else
     echo ""
     echo "ERROR: Setup request failed (HTTP $HTTP_CODE)"
     echo "Response:"
-    cat /tmp/segs_bootstrap_out.json 2>/dev/null || true
+    cat "$BOOTSTRAP_TMP" 2>/dev/null || true
+    rm -f "$BOOTSTRAP_TMP"
     echo ""
     echo "Common causes:"
     echo "  - Password does not meet complexity rules (uppercase, lowercase, number, special char)"

@@ -33,20 +33,23 @@ Environment variables
   SEG_GMAIL_DOMAIN       Google Workspace primary domain (e.g. pdax.ph)
   SEG_GMAIL_USERS        comma-separated list of mailboxes to watch, OR omit
                          to handle any mailbox pushed by the subscription
-  SEG_PUBSUB_TOKEN       optional shared secret to validate push messages
-                         (set in Pub/Sub push subscription as the auth token)
+  SEG_PUBSUB_TOKEN       REQUIRED shared secret to validate push messages.
+                         The receiver will refuse to start if this is empty.
+                         Set the same token in the Pub/Sub push subscription's
+                         "Authentication" field as a Bearer token.
 """
 from __future__ import annotations
 
 import base64
 import json
 import os
+import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 
 # Pipeline and report helpers — same path tricks as hold_consumer.py
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,7 +64,12 @@ _CREDS_PATH = os.environ.get("SEG_GMAIL_CREDENTIALS", str(_REPO_ROOT / "credenti
 _TOPIC = os.environ.get("SEG_GMAIL_TOPIC", "")
 _DOMAIN = os.environ.get("SEG_GMAIL_DOMAIN", "")
 _USERS = [u.strip() for u in os.environ.get("SEG_GMAIL_USERS", "").split(",") if u.strip()]
-_PUBSUB_TOKEN = os.environ.get("SEG_PUBSUB_TOKEN", "")
+_PUBSUB_TOKEN = os.environ.get("SEG_PUBSUB_TOKEN", "").strip()
+if not _PUBSUB_TOKEN:
+    raise RuntimeError(
+        "SEG_PUBSUB_TOKEN must be set — the receiver cannot start without it. "
+        "Generate one with: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
 
 _SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
@@ -224,12 +232,12 @@ def health():
 @app.post("/pubsub")
 async def pubsub_push(request: Request):
     """Handle Pub/Sub push notification from Gmail watch subscription."""
-    # Optional shared-secret validation (set SEG_PUBSUB_TOKEN in .env and in
-    # the Pub/Sub subscription's "Authentication" field).
-    if _PUBSUB_TOKEN:
-        auth = request.headers.get("Authorization", "")
-        if not auth.endswith(_PUBSUB_TOKEN):
-            raise HTTPException(status_code=401, detail="Invalid push token")
+    # Shared-secret validation — SEG_PUBSUB_TOKEN is now required at startup.
+    # Configure the same token in the Pub/Sub push subscription's Authorization
+    # header (format: "Bearer <token>").
+    auth = request.headers.get("Authorization", "")
+    if not secrets.compare_digest(auth, f"Bearer {_PUBSUB_TOKEN}"):
+        raise HTTPException(status_code=401, detail="Invalid push token")
 
     body = await request.json()
     message = body.get("message", {})
@@ -283,8 +291,14 @@ async def pubsub_push(request: Request):
 
 
 @app.post("/watch/{user_email:path}")
-def trigger_watch(user_email: str):
-    """Admin endpoint — manually renew a Gmail watch for one mailbox."""
+def trigger_watch(user_email: str, authorization: str = Header(default="")):
+    """Admin endpoint — manually renew a Gmail watch for one mailbox.
+
+    Requires the same Bearer token as the /pubsub endpoint to prevent
+    unauthenticated callers from triggering domain-wide delegation calls.
+    """
+    if not secrets.compare_digest(authorization, f"Bearer {_PUBSUB_TOKEN}"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     if not _TOPIC:
         raise HTTPException(status_code=400, detail="SEG_GMAIL_TOPIC not configured")
     try:

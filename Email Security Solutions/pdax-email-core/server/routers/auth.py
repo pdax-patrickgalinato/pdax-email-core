@@ -23,8 +23,15 @@ router = APIRouter(prefix="/api")
 _store = get_default_store()
 
 
+# Safe username pattern: alphanumeric, dots, underscores, hyphens, and @ only.
+# This prevents YAML injection when the username is written into config files
+# (enforcement.yaml, slack_config.yaml, notify_config.yaml) as the "updated_by"
+# field, and prevents shell/path special characters from reaching log entries.
+_USERNAME_PATTERN = r'^[a-zA-Z0-9._@\-]+$'
+
+
 class SetupRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=1, max_length=64, pattern=_USERNAME_PATTERN)
     password: str = Field(min_length=8, max_length=256)
 
 
@@ -35,7 +42,7 @@ class LoginRequest(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=1, max_length=64, pattern=_USERNAME_PATTERN)
     password: str = Field(min_length=8, max_length=256)
     role: str
 
@@ -158,8 +165,9 @@ def create_user(body: CreateUserRequest, admin: User = Depends(require_role("adm
     try:
         user = _store.create_user(body.username, body.password, body.role)
     except Exception as e:
-        # UNIQUE constraint on username is the realistic failure here.
-        raise HTTPException(status_code=409, detail=f"could not create user: {e}")
+        # Return a safe message; don't leak raw SQLite exception strings (schema details).
+        msg = "Username already exists" if "UNIQUE" in str(e) else "Could not create user"
+        raise HTTPException(status_code=409, detail=msg)
     activity_log.record(
         "user_create", actor=admin.username, actor_role=admin.role,
         detail=f"Created {user.username} with role {user.role}",

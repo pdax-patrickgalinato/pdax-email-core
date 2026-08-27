@@ -93,6 +93,13 @@ ip_login_limiter = RateLimiter(max_attempts=10, window_seconds=300, lockout_seco
 # 5 attempts per 10 min per username (protects individual accounts).
 username_lockout = RateLimiter(max_attempts=5, window_seconds=600, lockout_seconds=900)
 
+# Limiters for expensive pipeline-invoking endpoints.
+# Keyed by username to prevent a compromised account from flooding the LLM API
+# or exhausting VT/AbuseIPDB rate limits.
+analyze_limiter = RateLimiter(max_attempts=20, window_seconds=60)   # 20 EML analyses/user/min
+reevaluate_limiter = RateLimiter(max_attempts=10, window_seconds=60)  # 10 re-evals/user/min
+admin_write_limiter = RateLimiter(max_attempts=5, window_seconds=60)  # enforcement/policy writes
+
 
 # ---------------------------------------------------------------------------
 # Request body size limit
@@ -183,6 +190,11 @@ _SECURITY_HEADERS = {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     "Content-Security-Policy": _CSP,
     "Cache-Control": "no-store",
+    # Cross-origin isolation headers — mitigate Spectre-class side-channel attacks
+    # and prevent cross-origin data leaks via SharedArrayBuffer or process reuse.
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Resource-Policy": "same-origin",
 }
 
 # Strict-Transport-Security: only meaningful over HTTPS — suppress on plain HTTP

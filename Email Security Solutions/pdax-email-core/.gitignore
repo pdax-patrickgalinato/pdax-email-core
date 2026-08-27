@@ -9,11 +9,16 @@ __pycache__/
 *.pyc
 
 # Local SEG spool (quarantine / shadow logs / released) — never commit mail.
+# The root-level wildcard covers any file dropped directly in gateway/spool/
+# (e.g. summary JSONs, test outputs) that would otherwise be tracked by git.
 gateway/spool/quarantine/
 gateway/spool/released/
 gateway/spool/rejected/
 gateway/spool/shadow_logs/
 gateway/spool/hold/
+gateway/spool/*.json
+gateway/spool/*.jsonl
+gateway/spool/*.log
 
 # Local runtime state — intel cache + verdict-history correlation store
 # (app/pipeline/intel.py, app/pipeline/correlation.py). Regenerated locally,

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from .. import activity_log
 from ..auth_store import User
 from ..deps import require_role
+from ..security import admin_write_limiter
 
 router = APIRouter(prefix="/api")
 
@@ -46,12 +47,15 @@ def _read_mode() -> dict:
 def _write_mode(mode: str, actor: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
     _ENFORCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    # Quote actor as a YAML double-quoted scalar to prevent injection if the
+    # username validation is ever relaxed. The pattern constraint in auth.py
+    # already restricts usernames to [a-zA-Z0-9._@-] so no escaping is needed.
     _ENFORCE_FILE.write_text(
         f"# Runtime enforcement mode — written by PUT /api/enforcement (admin only).\n"
         f"# Values: shadow | quarantine | reject\n"
         f"mode: {mode}\n"
-        f"updated_by: {actor}\n"
-        f"updated_at: \"{now}\"\n",
+        f'updated_by: "{actor}"\n'
+        f'updated_at: "{now}"\n',
         encoding="utf-8",
     )
 
@@ -75,6 +79,8 @@ def set_enforcement(body: EnforcementUpdate, user: User = Depends(require_role("
             status_code=422,
             detail=f"mode must be one of: {', '.join(_VALID_MODES)}",
         )
+    if admin_write_limiter.is_limited(user.username):
+        raise HTTPException(status_code=429, detail="Too many config changes — wait one minute and retry")
     old = _read_mode().get("mode", "shadow")
     _write_mode(mode, user.username)
     activity_log.record(

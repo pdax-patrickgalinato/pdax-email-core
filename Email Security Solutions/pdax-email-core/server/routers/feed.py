@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from .. import activity_log, feed_builder
 from ..auth_store import User
 from ..deps import get_correlation_store, require_role
+from ..security import reevaluate_limiter
 from ..security import assert_within_root, validate_queue_id
 from app import disposition
 
@@ -71,6 +72,8 @@ def keep_blocked(queue_id: str, user: User = Depends(require_role("admin", "anal
 
 @router.post("/quarantine/{queue_id}/reevaluate")
 def reevaluate(queue_id: str, user: User = Depends(require_role("admin", "analyst"))):
+    if reevaluate_limiter.is_limited(user.username):
+        raise HTTPException(status_code=429, detail="Too many re-evaluations — wait one minute and retry")
     validate_queue_id(queue_id)
     try:
         # Uses dashboard_content_provider() (GLM when credentials exist).

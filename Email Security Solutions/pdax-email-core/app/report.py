@@ -602,6 +602,29 @@ def slack_blocks(r: PipelineResult) -> dict:
     }
 
 
+_ALLOWED_WEBHOOK_HOSTS = (
+    ".slack.com",
+    ".office.com",     # Microsoft Teams
+    ".webhook.office.com",
+    ".pagerduty.com",
+)
+
+
+def _webhook_url_allowed(url: str) -> bool:
+    """Return True only if the webhook URL points to an allowed SaaS host.
+    Prevents an insider from configuring an internal SSRF target as the webhook.
+    """
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        if p.scheme not in ("https",):
+            return False
+        host = p.hostname or ""
+        return any(host == h.lstrip(".") or host.endswith(h) for h in _ALLOWED_WEBHOOK_HOSTS)
+    except Exception:
+        return False
+
+
 def send_slack_alert(result: PipelineResult, webhook_url: str, threshold: str = "SUSPICIOUS") -> None:
     """POST a Slack Block Kit alert for SUSPICIOUS / MALICIOUS verdicts.
 
@@ -626,6 +649,11 @@ def send_slack_alert(result: PipelineResult, webhook_url: str, threshold: str = 
         return  # unknown verdict — skip
 
     if verdict_idx < min_idx:
+        return
+
+    if not _webhook_url_allowed(webhook_url):
+        import sys
+        print(f"[SEGS] Slack alert blocked — webhook URL not in allowed list: {webhook_url[:80]}", file=sys.stderr)
         return
 
     try:

@@ -2137,7 +2137,7 @@
     html += '<div class="drawer-field"><span class="df-label">Verdict</span><div>' + chip(e.verdict) +
       ' <span class="mono" style="margin-left:6px;">score ' + e.score + "/100</span></div>" +
       (e.hardOverride
-        ? '<div style="margin-top:6px;">' + '<div class="override-banner">' + ICON.critical + "<span><strong>Hard override: " + e.hardOverride + ".</strong> " + escapeHtml(describeFlag(e.hardOverride)) + "</span></div></div>"
+        ? '<div style="margin-top:6px;">' + '<div class="override-banner">' + ICON.critical + "<span><strong>Hard override: " + escapeHtml(e.hardOverride || "") + ".</strong> " + escapeHtml(describeFlag(e.hardOverride)) + "</span></div></div>"
         : '<div class="df-value" style="margin-top:4px; color:var(--ink-muted); font-size:12px;">' + escapeHtml(verdictMargin(e.verdict, e.score)) + "</div>") +
       "</div>";
     if (e.threatClass && e.threatClass !== "none") {
@@ -2929,12 +2929,21 @@
         "<td><span class='verdict-chip verdict-low'>" + t + "</span></td>" +
         "<td style='font-family:monospace;font-size:13px;'>" + escapeHtml(v) + "</td>" +
         "<td style='color:var(--ink-muted);font-size:12px;'>" + escapeHtml(e.note || "") + "</td>" +
-        "<td><button class='btn btn-sm btn-danger' onclick='removeListEntry(\"" + escapeHtml(_listsActiveTab) + "\",\"" + escapeHtml(v) + "\")'>Remove</button></td>" +
+        "<td><button class='btn btn-sm btn-danger rm-list-btn'" +
+          " data-list='" + escapeHtml(_listsActiveTab) + "'" +
+          " data-val='" + escapeHtml(v) + "'>Remove</button></td>" +
         "</tr>";
     }).join("");
   }
 
-  window.removeListEntry = function (listName, value) {
+  // Delegated click handler for Remove buttons — avoids inline onclick= which
+  // is vulnerable to HTML entity decode bypass (escapeHtml maps " to &quot;
+  // but the HTML parser decodes it back to " before the JS engine sees it).
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest(".rm-list-btn");
+    if (!btn) return;
+    var listName = btn.dataset.list;
+    var value = btn.dataset.val;
     fetch("/api/lists/" + encodeURIComponent(listName) + "/" + encodeURIComponent(value), {
       method: "DELETE", credentials: "same-origin"
     }).then(function (r) {
@@ -2942,7 +2951,7 @@
       toast(ICON.good, "Removed " + value + " from " + listName);
       loadLists();
     }).catch(function (err) { toast(ICON.warning, err.message || String(err)); });
-  };
+  });
 
   document.querySelectorAll(".lists-tab-btn").forEach(function (btn) {
     btn.addEventListener("click", function () {

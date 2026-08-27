@@ -5,7 +5,7 @@
   "cpu": "256",
   "memory": "512",
   "executionRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/segs-task-execution-role",
-  "taskRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/segs-task-role",
+  "taskRoleArn": "arn:aws:iam::REPLACE_AWS_ACCOUNT_ID:role/segs-receiver-task-role",
   "containerDefinitions": [
     {
       "name": "segs-receiver",

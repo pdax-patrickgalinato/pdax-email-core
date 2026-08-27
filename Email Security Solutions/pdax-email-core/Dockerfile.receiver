@@ -9,12 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN addgroup --system segs && adduser --system --ingroup segs --no-create-home --shell /bin/false segs
+
+COPY --chown=segs:segs . .
 
 RUN chmod +x entrypoint.sh
 
 ENV SEG_QUARANTINE_ROOT=/opt/segs/gateway/spool
 ENV SEG_COOKIE_SECURE=1
+
+USER segs
 
 EXPOSE 8766
 

@@ -85,8 +85,12 @@ def _send(raw: bytes, result: "PipelineResult") -> None:
     if not to_addrs:
         return
 
-    subject = result.subject or "(no subject)"
-    sender = result.from_header or "(unknown sender)"
+    def _safe_header(v: str, max_len: int = 500) -> str:
+        """Strip CR/LF to prevent SMTP header injection; truncate to max_len."""
+        return v.replace("\r", " ").replace("\n", " ").strip()[:max_len]
+
+    subject = _safe_header(result.subject or "(no subject)")
+    sender = _safe_header(result.from_header or "(unknown sender)")
     score = result.composite_score
     reasons = result.reasons or []
     reason_summary = ", ".join(reasons[:5]) if reasons else "no specific flags"

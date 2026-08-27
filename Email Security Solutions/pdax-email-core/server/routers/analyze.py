@@ -19,6 +19,7 @@ from app.report import _describe_flag, _intel_section, _ioc_context, _md_table, 
 from server import activity_log
 from server.auth_store import User
 from server.deps import get_correlation_store, require_role
+from server.security import analyze_limiter
 
 router = APIRouter(prefix="/api/analyze", tags=["analyze"])
 
@@ -216,6 +217,8 @@ async def analyze_eml(
     file: UploadFile = File(...),
     user: User = Depends(require_role("admin", "analyst")),
 ):
+    if analyze_limiter.is_limited(user.username):
+        raise HTTPException(status_code=429, detail="Too many EML analyses — wait one minute and retry")
     filename = Path(file.filename or "upload.eml").name
     if not filename.lower().endswith(".eml"):
         raise HTTPException(status_code=400, detail="Only .eml files are accepted")
@@ -264,9 +267,12 @@ async def analyze_eml(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="Deep analysis service unavailable") from exc
     except AnalysisError as exc:
-        # LLM exhausted all retries — return a 422 with the specific reason
-        # (token budget, empty response, etc.) so the dashboard can display it.
-        raise HTTPException(status_code=422, detail=f"Analysis incomplete: {exc}") from exc
+        # LLM exhausted all retries. Log the full detail server-side (may contain
+        # API quota messages, model names, or response fragments); return a safe
+        # message to the client to avoid leaking backend LLM configuration.
+        import logging as _logging
+        _logging.getLogger(__name__).warning("AnalysisError: %s", exc)
+        raise HTTPException(status_code=422, detail="Analysis incomplete — LLM stage failed, check server logs") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Deep analysis failed — check server logs") from exc
 

@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 """
 
-_PBKDF2_ITERATIONS = 200_000
+_PBKDF2_ITERATIONS = 600_000   # NIST SP 800-132 (2023) recommendation for PBKDF2-SHA256
 _SESSION_TTL_SECONDS = 12 * 3600   # 12h — a local admin tool, not a public SaaS
 _MAX_SESSIONS_PER_USER = 10        # cap concurrent sessions; oldest evicted on overflow
 ROLES = ("admin", "analyst", "viewer")

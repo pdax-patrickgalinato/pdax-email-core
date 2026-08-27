@@ -48,8 +48,8 @@ def _write_config(enabled: bool, webhook_url: str, threshold: str, actor: str) -
         f"enabled: {str(enabled).lower()}\n"
         f"webhook_url: {webhook_url!r}\n"
         f"threshold: {threshold}\n"
-        f"updated_by: {actor}\n"
-        f"updated_at: \"{now}\"\n",
+        f'updated_by: "{actor}"\n'
+        f'updated_at: "{now}"\n',
         encoding="utf-8",
     )
 

@@ -10,7 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Create a dedicated non-root user before copying application files.
+# Running as root inside a container is unnecessary and increases the blast
+# radius of any code-execution vulnerability (no privilege boundary).
+RUN addgroup --system segs && adduser --system --ingroup segs --no-create-home --shell /bin/false segs
+
+COPY --chown=segs:segs . .
 
 RUN chmod +x entrypoint.sh
 
@@ -18,6 +23,8 @@ RUN chmod +x entrypoint.sh
 ENV SEG_QUARANTINE_ROOT=/opt/segs/gateway/spool
 # Secure cookies — ALB always terminates TLS before reaching the container
 ENV SEG_COOKIE_SECURE=1
+
+USER segs
 
 EXPOSE 8765
 

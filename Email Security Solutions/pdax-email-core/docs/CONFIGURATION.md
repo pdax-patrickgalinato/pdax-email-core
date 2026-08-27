@@ -118,6 +118,7 @@ These variables control timeout and throughput budgets. The defaults are calibra
 | `SEG_ANALYZE_TIMEOUT_SECONDS` | `300` | Per-phase timeout (seconds) for the EML Analyzer (`POST /api/analyze/eml`). Covers both the pipeline run and the GLM deep-analysis call separately — each phase gets this budget independently. Raise to `600` if large attachments or slow OSINT enrichment trigger 504 errors. |
 | `SEG_EMAIL_SCAN_TIMEOUT_SECONDS` | `300` | Timeout for live incoming Gmail email scans processed by the receiver. Applies to the full pipeline including GLM content analysis and VT intel lookups. |
 | `SEG_VT_MAX_INDICATORS_PER_EMAIL` | `8` | Maximum number of indicators (hashes + URLs + IPs) submitted to VirusTotal per email. Caps worst-case VT throttle at `8 × 15 s = 120 s` on the free tier. Raise if you need deeper coverage and have a paid API tier; lower to `3–4` to preserve daily quota on high-volume deployments. |
+| `SEG_VT_TIME_BUDGET_SECONDS` | `90` | Hard wall-clock cap on the entire VT + AbuseIPDB intel stage per email. Once elapsed, remaining uncached indicators are skipped and the pipeline continues — guarantees the intel stage never stalls the pipeline regardless of indicator count or API latency. The count budget (`SEG_VT_MAX_INDICATORS_PER_EMAIL`) and this time budget are enforced together; whichever is hit first wins. Raise to `180` with a paid VT tier. |
 
 ---
 

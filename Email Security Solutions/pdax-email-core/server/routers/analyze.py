@@ -267,26 +267,11 @@ async def analyze_eml(
 
     t0 = time.perf_counter()
     corr = get_correlation_store()
-    try:
-        pipeline, pipeline_result = await asyncio.wait_for(
-            asyncio.to_thread(_pipeline_summary, raw, filename, corr),
-            timeout=_ANALYZE_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
-        raise HTTPException(
-            status_code=504,
-            detail=f"Pipeline timed out after {_ANALYZE_TIMEOUT}s — the email may have many "
-                   "large attachments or slow OSINT enrichment. Raise SEG_ANALYZE_TIMEOUT_SECONDS "
-                   "or upload a smaller file.",
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Analysis failed — check server logs") from None
 
+    # Resolve GLM credentials upfront — fail fast before spinning up threads.
     try:
-        # Import lazily so missing optional deps don't break feed/auth boot.
         from eml_analysis_agent import (
             AnalysisError, analyze_eml_bytes, resolve_glm_credentials_path)
-
         creds = resolve_glm_credentials_path()
         if not creds.is_file():
             raise HTTPException(
@@ -294,32 +279,59 @@ async def analyze_eml(
                 detail="GLM credentials not configured — set SEG_GLM_CREDENTIALS_PATH "
                        "or place credentials.json in the project root",
             )
-        # analyze_eml_bytes is a blocking GLM call that can take minutes —
-        # run it in a thread with a timeout so a stalled LLM call doesn't hold the
-        # request open indefinitely. Raise SEG_ANALYZE_TIMEOUT_SECONDS if needed.
-        deep = await asyncio.wait_for(
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(status_code=503, detail="EML analysis module unavailable")
+
+    # Run pipeline (heuristic + VT intel) and GLM deep analysis CONCURRENTLY.
+    # They hit completely different APIs and share no mutable state, so running
+    # in parallel is safe. Total request time = max(pipeline, GLM) instead of
+    # pipeline + GLM — cuts worst-case from ~480 s to ~300 s.
+    pipeline_outcome, deep_outcome = await asyncio.gather(
+        asyncio.wait_for(
+            asyncio.to_thread(_pipeline_summary, raw, filename, corr),
+            timeout=_ANALYZE_TIMEOUT,
+        ),
+        asyncio.wait_for(
             asyncio.to_thread(analyze_eml_bytes, raw, filename, credentials_path=str(creds)),
             timeout=_ANALYZE_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
+        ),
+        return_exceptions=True,
+    )
+
+    # ── Pipeline outcome (SEGS section) — degradable, never blocks the response ──
+    import logging as _log
+    pipeline: dict | None = None
+    pipeline_result = None
+    if isinstance(pipeline_outcome, asyncio.TimeoutError):
+        _log.getLogger(__name__).warning(
+            "analyze_eml: SEGS pipeline timed out after %ss — SEGS section omitted", _ANALYZE_TIMEOUT)
+    elif isinstance(pipeline_outcome, Exception):
+        _log.getLogger(__name__).warning(
+            "analyze_eml: SEGS pipeline error — %s", pipeline_outcome)
+    else:
+        pipeline, pipeline_result = pipeline_outcome
+
+    # ── Deep (GLM) outcome — primary deliverable; failure returns 5xx ──
+    if isinstance(deep_outcome, asyncio.TimeoutError):
         raise HTTPException(
             status_code=504,
             detail=f"LLM analysis timed out after {_ANALYZE_TIMEOUT}s — the LLM is slow or "
                    "the email payload is very large. Raise SEG_ANALYZE_TIMEOUT_SECONDS or retry.",
         )
-    except HTTPException:
-        raise
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail="Deep analysis service unavailable") from exc
-    except AnalysisError as exc:
-        # LLM exhausted all retries. Log the full detail server-side (may contain
-        # API quota messages, model names, or response fragments); return a safe
-        # message to the client to avoid leaking backend LLM configuration.
-        import logging as _logging
-        _logging.getLogger(__name__).warning("AnalysisError: %s", exc)
-        raise HTTPException(status_code=422, detail="Analysis incomplete — LLM stage failed, check server logs") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Deep analysis failed — check server logs") from exc
+    if isinstance(deep_outcome, HTTPException):
+        raise deep_outcome
+    if isinstance(deep_outcome, FileNotFoundError):
+        raise HTTPException(status_code=503, detail="Deep analysis service unavailable")
+    if isinstance(deep_outcome, AnalysisError):
+        _log.getLogger(__name__).warning("AnalysisError: %s", deep_outcome)
+        raise HTTPException(
+            status_code=422,
+            detail="Analysis incomplete — LLM stage failed, check server logs")
+    if isinstance(deep_outcome, Exception):
+        raise HTTPException(status_code=502, detail="Deep analysis failed — check server logs")
+    deep = deep_outcome
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
     segs = (pipeline or {}).get("verdict")
@@ -332,7 +344,8 @@ async def analyze_eml(
                + f" ({elapsed_ms} ms)",
         meta={"filename": filename, "verdict": segs, "risk_level": risk},
     )
-    combined_markdown = (deep.get("markdown") or "") + _segs_section(pipeline_result, pipeline)
+    segs_section = _segs_section(pipeline_result, pipeline) if pipeline_result is not None else ""
+    combined_markdown = (deep.get("markdown") or "") + segs_section
     return {
         "filename": deep["filename"],
         "analysis": deep["analysis"],

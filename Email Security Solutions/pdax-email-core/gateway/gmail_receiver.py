@@ -57,6 +57,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT))
 
 from app.pipeline.runner import run_pipeline  # noqa: E402
+from app.pipeline import content_ai as _content_ai  # noqa: E402
 from app.report import send_slack_alert  # noqa: E402
 from app.notify import send_quarantine_notification  # noqa: E402
 
@@ -129,7 +130,12 @@ def scan_message(user_email: str, message_id: str) -> dict:
     ).execute()
 
     raw = base64.urlsafe_b64decode(msg["raw"] + "==")
-    result = run_pipeline(raw, source="gmail_api")
+    # Use the fast heuristic provider here — GLM deep analysis runs on-demand
+    # via the Analyze tab and must not block the live-email scanning path.
+    # This keeps live scans bounded: heuristic + VT intel ≤ 90 s (VT time budget)
+    # rather than heuristic + VT + GLM which can exceed the 300 s scan timeout.
+    result = run_pipeline(raw, source="gmail_api",
+                          content_provider=_content_ai.HeuristicProvider())
 
     verdict = result.verdict.value
     action = "none"

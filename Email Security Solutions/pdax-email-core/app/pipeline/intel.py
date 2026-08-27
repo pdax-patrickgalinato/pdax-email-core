@@ -239,7 +239,8 @@ class VTAbuseIPDBIntelClient:
         self._vt_last_call = time.time()
 
     def _vt_check(self, path: str, indicator: str, indicator_type: str,
-                  save_details: bool = False, _budget: list = None) -> Optional[bool]:
+                  save_details: bool = False, _budget: list = None,
+                  _deadline: float = 0.0) -> Optional[bool]:
         """Returns True (malicious), False (clean), or None (degraded/error —
         caller should not trust this result either way).
 
@@ -247,9 +248,9 @@ class VTAbuseIPDBIntelClient:
         cached so get_domain_details() can retrieve them without a second API call.
 
         _budget: mutable [remaining_calls] list. When provided and exhausted,
-        uncached indicators are skipped rather than sleeping for 15 s per call —
-        this bounds per-email VT throttle time to budget × 15 s.
-        Cache hits are always honoured regardless of the budget."""
+        uncached indicators are skipped rather than sleeping for 15 s per call.
+        _deadline: absolute Unix timestamp after which no new calls are made.
+        Cache hits are always honoured regardless of budget or deadline."""
         cached = self.cache.get(indicator, indicator_type, "virustotal")
         if cached is not None:
             return cached == "malicious"
@@ -259,9 +260,11 @@ class VTAbuseIPDBIntelClient:
         # (a 429 was received this run — burns no budget and no sleep time).
         if not _vt_quota_ok():
             return None
+        if _deadline and time.time() >= _deadline:
+            return None   # wall-clock time budget exceeded — degrade gracefully
         if _budget is not None:
             if _budget[0] <= 0:
-                return None   # budget exhausted — degrade gracefully, don't sleep
+                return None   # call-count budget exhausted
             _budget[0] -= 1
         self._vt_throttle()
         status, data = self._http_get(
@@ -292,7 +295,8 @@ class VTAbuseIPDBIntelClient:
                            "ok", json.dumps(details))
         return malicious
 
-    def _vt_url_check(self, url: str, _budget: list = None) -> Optional[bool]:
+    def _vt_url_check(self, url: str, _budget: list = None,
+                      _deadline: float = 0.0) -> Optional[bool]:
         """URL-specific check: lookup existing report, submit for scanning on 404."""
         cached = self.cache.get(url, "url", "virustotal")
         if cached is not None:
@@ -300,6 +304,8 @@ class VTAbuseIPDBIntelClient:
         if not self.vt_api_key:
             return None
         if not _vt_quota_ok():
+            return None
+        if _deadline and time.time() >= _deadline:
             return None
         if _budget is not None:
             if _budget[0] <= 0:
@@ -328,30 +334,35 @@ class VTAbuseIPDBIntelClient:
         return None
 
     def _vt_submit_url(self, url: str) -> None:
-        """Submits a URL to VT for scanning. Fire-and-forget; result available later."""
+        """Submits a URL to VT for scanning.
+
+        Runs in a daemon thread so the HTTP POST never blocks the pipeline. The
+        result is stored in the cache and available on the next email scan.
+        """
         submit_key = f"submitted:{url[:200]}"
         if self.cache.get(submit_key, "url_submission", "virustotal") == "submitted":
             return
-        if not self.vt_api_key:
+        if not self.vt_api_key or not _vt_quota_ok():
             return
-        if not _vt_quota_ok():
-            return   # quota exhausted — skip submission
+        import threading as _threading
         import urllib.parse as _up
+        cache_ref = self.cache
+        api_key = self.vt_api_key
         body = _up.urlencode({"url": url}).encode("ascii")
         req = urllib.request.Request(
             "https://www.virustotal.com/api/v3/urls",
             data=body,
-            headers={
-                "x-apikey": self.vt_api_key,
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
+            headers={"x-apikey": api_key,
+                     "Content-Type": "application/x-www-form-urlencoded"},
         )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                if resp.status in (200, 201):
-                    self.cache.put(submit_key, "url_submission", "virustotal", "submitted")
-        except Exception:
-            pass   # submission failure is non-fatal
+        def _do_submit():
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    if resp.status in (200, 201):
+                        cache_ref.put(submit_key, "url_submission", "virustotal", "submitted")
+            except Exception:
+                pass
+        _threading.Thread(target=_do_submit, daemon=True, name="vt-url-submit").start()
 
     def get_domain_details(self, domain: str) -> Optional[dict]:
         """Returns cached VT domain details (categories, reputation, etc.) if available.
@@ -364,13 +375,16 @@ class VTAbuseIPDBIntelClient:
         except Exception:
             return None
 
-    def _abuseipdb_check(self, ip: str, _budget: list = None) -> Optional[bool]:
+    def _abuseipdb_check(self, ip: str, _budget: list = None,
+                         _deadline: float = 0.0) -> Optional[bool]:
         cached = self.cache.get(ip, "ip", "abuseipdb")
         if cached is not None:
             return cached == "malicious"
         if not self.abuseipdb_api_key:
             return None
         if not _abuseipdb_quota_ok():
+            return None
+        if _deadline and time.time() >= _deadline:
             return None
         if _budget is not None:
             if _budget[0] <= 0:
@@ -401,11 +415,18 @@ class VTAbuseIPDBIntelClient:
 
         # Per-email cap on fresh (non-cached) API calls. Each fresh VT call
         # sleeps ~15 s for the rate-limit throttle, so N fresh calls cost N×15 s.
-        # With many attachments + many URLs this blows through any reasonable
-        # per-request timeout. Cache hits are always honoured regardless of budget.
-        # Tune via SEG_VT_MAX_INDICATORS_PER_EMAIL; default 8 → ≤120 s throttle.
+        # Cache hits are always honoured regardless of budget or deadline.
+        # Tune via SEG_VT_MAX_INDICATORS_PER_EMAIL; default 8 → ≤105 s throttle.
         max_fresh = int(os.environ.get("SEG_VT_MAX_INDICATORS_PER_EMAIL", "8"))
         budget = [max_fresh]   # mutable so sub-methods can decrement in place
+
+        # Hard wall-clock deadline — guarantees the intel stage never stalls the
+        # pipeline regardless of indicator count or VT response latency.
+        # Default 90 s: worst-case 6 fresh calls (6×15 s) plus API response time.
+        # Raise SEG_VT_TIME_BUDGET_SECONDS if VT coverage is more important than
+        # latency (requires a paid VT tier to avoid 429 on long scans).
+        time_budget = float(os.environ.get("SEG_VT_TIME_BUDGET_SECONDS", "90"))
+        _deadline = time.time() + time_budget
 
         hits = []
         any_error = False
@@ -414,29 +435,32 @@ class VTAbuseIPDBIntelClient:
         # a hash match is definitive malware confirmation. This ensures attachment
         # reputation lookups always run even when the budget is tight.
         for h in set(hashes or []):
-            result = self._vt_check(f"files/{h}", h, "hash", _budget=budget)
+            result = self._vt_check(f"files/{h}", h, "hash", _budget=budget, _deadline=_deadline)
             if result is None and self.vt_api_key:
                 any_error = True
             elif result:
                 hits.append(f"intel_hash:{h}")
 
         for d in set(domains or []):
-            result = self._vt_check(f"domains/{d}", d, "domain", save_details=True, _budget=budget)
+            result = self._vt_check(f"domains/{d}", d, "domain", save_details=True,
+                                    _budget=budget, _deadline=_deadline)
             if result is None and self.vt_api_key:
                 any_error = True
             elif result:
                 hits.append(f"intel_domain:{d}")
 
         for ip in set(ips or []):
-            ab_result = self._abuseipdb_check(ip, _budget=budget)
-            vt_result = self._vt_check(f"ip_addresses/{ip}", ip, "ip", _budget=budget) if self.vt_api_key else None
+            ab_result = self._abuseipdb_check(ip, _budget=budget, _deadline=_deadline)
+            vt_result = (self._vt_check(f"ip_addresses/{ip}", ip, "ip",
+                                        _budget=budget, _deadline=_deadline)
+                         if self.vt_api_key else None)
             if ab_result is None and vt_result is None and (self.abuseipdb_api_key or self.vt_api_key):
                 any_error = True
             elif ab_result or vt_result:
                 hits.append(f"intel_ip:{ip}")
 
         for u in set(urls or []):
-            result = self._vt_url_check(u, _budget=budget)
+            result = self._vt_url_check(u, _budget=budget, _deadline=_deadline)
             if result is None and self.vt_api_key:
                 # Check if it was a 404+submission (not an error) vs a real failure.
                 # A submitted URL has a "submitted:" cache entry; a real error has none.

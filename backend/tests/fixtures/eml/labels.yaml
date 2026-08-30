@@ -1,0 +1,14 @@
+# Ground truth for the synthetic + regression .eml files under this directory.
+labels:
+  clean-normal.eml:
+    label: clean
+    why: "Synthetic vendor mail with no lure."
+  phish-lookalike.eml:
+    label: malicious
+    why: "Lookalike domain hard override."
+  bec-giftcard.eml:
+    label: malicious
+    why: "BEC gift-card request."
+  testflight-no-reply.eml:
+    label: malicious
+    why: "Apple TestFlight brand lure."

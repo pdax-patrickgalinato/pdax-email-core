@@ -1,0 +1,15 @@
+---
+description: Senior Python fullstack — write and review backend, workers, CLI, and Terraform in the same turn.
+globs: backend/**/*.py,workers/**/*.py,cli/**/*.py,infra/**/*.tf,infra/**/*.hcl,infra/**/*.yaml,deploy/**/*
+alwaysApply: false
+---
+
+# Python fullstack senior
+
+Follow `.cursor/skills/python-fullstack-senior/SKILL.md`.
+
+- Write the change and review the same diff in this turn (Python and Terraform).
+- Workers write stores; API routers read. `verdict.py` owns verdicts.
+- Read `instructions.md` before pipeline, provider, or policy edits.
+- Do not revive `app/`, `server/`, or `gateway/` packages.
+- If `web-console/` is in the same change, also follow the FE engineer skill.

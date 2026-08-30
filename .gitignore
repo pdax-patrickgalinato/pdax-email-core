@@ -1,1 +1,37 @@
 .DS_Store
+
+# GCP service-account keys and other local credentials — never commit these.
+credentials.json
+*-service-account.json
+*.pem
+.env
+
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Local SEG spool (quarantine / shadow logs / released) — never commit mail.
+email/spool/
+gateway/spool/
+
+# Local runtime state — intel cache + verdict-history correlation store
+# (backend/pipeline/intel.py, backend/pipeline/correlation.py). Regenerated
+# locally, never shared/committed.
+data/
+
+# Generated MSOC-style reports from segs.cli.eml_analysis_agent
+data/eml-output/
+
+# Svelte/Vite console — install and build locally / in CI; do not commit output.
+web-console/node_modules/
+web-console/dist/
+web-console/playwright-report/
+web-console/test-results/
+web-console/blob-report/
+
+# Claude Code internal files — plans, memory, worktree metadata.
+.claude/
+
+# Leftover nested copy after the repo flatten — do not re-add.
+Email Security Solutions/

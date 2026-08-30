@@ -1,0 +1,43 @@
+import { state } from "../lib/dashboard";
+import { adminUser } from "./fixtures";
+import type { Email } from "../types";
+
+export function resetEngine(feed: Email[] = []) {
+  state.feed = feed;
+  state.feedStats = null;
+  state.feedError = "";
+  state.feedLoaded = false;
+  state.audit = [];
+  state.senderProfiles = [];
+  state.campaigns = [];
+  state.workers = null;
+  state.llmConfigured = true;
+  state.llmAssessTimeoutMs = 120000;
+  state.activePage = "overview";
+  state.qFilter = "all";
+  state.overviewFilter = "all";
+  state.filteredFeed = null;
+  state.originCountry = "";
+  state.feedSearch = "";
+  state.searchHits = null;
+  state.searchLabels = [];
+  state.searchSql = "";
+  state.searchPending = false;
+  state.searchError = "";
+  state.searchSource = "";
+  state.feedPage = 1;
+  state.qSearch = "";
+  state.auditSearch = "";
+  state.auditWazuhOnly = false;
+  state.senderProfileQuery = "";
+  state.senderProfileReadyOnly = false;
+  state.senderProfileSelected = "";
+  state.senderAssessFilter = "all";
+  state.campaignQuery = "";
+  state.campaignFlaggedOnly = false;
+  state.campaignSelected = "";
+  state.detailId = null;
+  state.detailReturnPage = "overview";
+  state.pinnedFeed = [];
+  window.__SEG_CURRENT_USER__ = adminUser;
+}

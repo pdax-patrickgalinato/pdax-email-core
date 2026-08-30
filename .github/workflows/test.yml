@@ -1,0 +1,55 @@
+name: test
+
+on:
+  push:
+    branches: [main, master, "feature/**", "chore/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web-console/package-lock.json
+
+      - name: Sync lockfile
+        run: uv sync --frozen --extra dev
+
+      - name: Build web console
+        run: |
+          cd web-console
+          npm ci
+          npm run build
+
+      - name: Web console unit tests
+        run: |
+          cd web-console
+          npm test
+
+      - name: Web console Playwright
+        run: |
+          cd web-console
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Ruff (bug-oriented rules)
+        run: uv run ruff check backend workers
+
+      - name: Unit tests
+        run: uv run pytest
+
+      - name: Golden-set eval (FP=0 gate)
+        run: uv run python backend/tests/eval/run_eval.py backend/tests/fixtures/eml/
+
+      - name: Python 3.9 parse gate
+        run: |
+          uv run python -c "import ast,pathlib; [ast.parse(p.read_text(), feature_version=(3,9)) for p in pathlib.Path('.').rglob('*.py') if '.venv' not in str(p) and 'egg-info' not in str(p) and 'node_modules' not in str(p)]"

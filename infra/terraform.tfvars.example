@@ -1,0 +1,37 @@
+# Copy to terraform.tfvars (gitignored). The stack creates its own VPC
+# (10.80.0.0/16) — it does not use the account default VPC.
+
+aws_region  = "ap-southeast-1"
+environment = "prod"
+
+# Optional. Must not be 172.31.0.0/16 (AWS default VPC).
+# vpc_cidr = "10.80.0.0/16"
+
+gmail_domain = "pdax.ph"
+enforce_mode = "shadow"
+
+# Leave empty on the first apply (creates VPC, ECR, ALB, CloudFront, Aurora).
+# After infra/scripts/push-images.sh:
+# api_image_digest      = "sha256:…"
+# receiver_image_digest = "sha256:…"
+# worker_image_digest   = "sha256:…"
+#
+# Split workers: keep the all-in-one receiver off. API runs two tasks for HA.
+# SQS autoscaling owns static / content_ai / thread_ai desired_count.
+# After API Gateway exists, the API ALB is internal (VPC-link only).
+# api_alb_internal         = true
+# api_desired_count        = 2
+# receiver_desired_count   = 0
+# content_ai_desired_count = 1   # min; scaler bursts up to content_ai_max_count
+# content_ai_max_count     = 6
+# aurora_max_capacity      = 2
+# SQS autoscaling needs the account Application Auto Scaling service-linked
+# role (or iam:PassRole on esdd-*-autoscaling). Off until that exists.
+# enable_worker_autoscaling = true
+
+# After: cd ../web-console && npm ci && npm run build
+# sync_console = true
+
+# First apply creates the VPC, CMK, mail bucket, SQS, Aurora (private), and secrets.
+# Operator keys go in segs/{env}/app via scripts/put-secrets.sh.
+# Infra URLs (S3, SQS, KMS, DATABASE_URL) are written by Terraform to segs/{env}/infra.

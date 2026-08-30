@@ -1,0 +1,42 @@
+FROM python:3.12-slim
+
+WORKDIR /opt/segs
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 segs \
+    && useradd --uid 1000 --gid segs --no-create-home --shell /usr/sbin/nologin segs
+
+COPY requirements.txt pyproject.toml README.md ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --chown=segs:segs backend ./backend
+COPY --chown=segs:segs workers ./workers
+COPY --chown=segs:segs cli ./cli
+COPY --chown=segs:segs deploy/docker/entrypoint.sh /opt/segs/entrypoint.sh
+COPY --chown=segs:segs deploy/docker/tls-env.sh /opt/segs/tls-env.sh
+
+RUN chmod +x /opt/segs/entrypoint.sh \
+    && mkdir -p /opt/segs/data /opt/segs/email/spool /opt/segs/tls \
+    && chown segs:segs /opt/segs \
+    && chown -R segs:segs /opt/segs/data /opt/segs/email /opt/segs/tls
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/segs \
+    SEG_QUARANTINE_ROOT=/opt/segs/email/spool \
+    SEG_COOKIE_SECURE=1 \
+    SEG_PROFILE_WORKER=1 \
+    SEG_INCONCLUSIVE_RETRY=1 \
+    SEG_CORRELATION_STORE=1
+
+USER segs
+
+EXPOSE 8766
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fk https://localhost:8766/health || curl -f http://localhost:8766/health || exit 1
+
+# --workers 1: Gmail poll + profile ingest + inconclusive retry are in-process.
+CMD ["sh", "/opt/segs/entrypoint.sh", "workers.receiver:app", "8766"]

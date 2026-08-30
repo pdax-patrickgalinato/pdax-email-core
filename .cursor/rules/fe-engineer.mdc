@@ -1,0 +1,15 @@
+---
+description: Frontend engineer — write and review the React console and CloudFront/S3 Terraform in the same turn.
+globs: web-console/**/*.ts,web-console/**/*.tsx,web-console/**/*.css,web-console/**/*.html,web-console/package.json
+alwaysApply: false
+---
+
+# FE engineer
+
+Follow `.cursor/skills/fe-engineer/SKILL.md`.
+
+- Write the change and review the same diff in this turn (UI and console Terraform).
+- Same-origin cookies; do not grow `src/lib/dashboard.ts`.
+- Page-scoped fetches; Detail uses item GET, not a full feed rebuild.
+- No new `@ts-nocheck` or `any` on files you add.
+- If `backend/api/` or `infra/` is in the same change, also follow the Python fullstack skill.

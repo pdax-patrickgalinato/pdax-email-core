@@ -1,0 +1,135 @@
+# Local stand-in for the Fargate API + one container per worker.
+# Postgres sidecar matches Aurora. Leave SEG_S3_BUCKET / SEG_SQS_* unset
+# to use the filesystem spool and SQLite queues (same as pytest).
+#
+#   docker compose up --build
+#
+# Copy .env.example → .env first. gmail-poll needs Gmail credentials to poll.
+
+x-worker: &worker
+  build:
+    context: .
+    dockerfile: deploy/docker/Dockerfile.worker
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+    SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+  volumes:
+    - segs-data:/opt/segs/data
+    - segs-spool:/opt/segs/email/spool
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: segs
+      POSTGRES_USER: segs
+      POSTGRES_PASSWORD: segs
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U segs"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - segs-pg:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - "8765:8765"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_PROFILE_WORKER: "0"
+      SEG_CAMPAIGN_WORKER: "0"
+      SEG_SENDER_RISK_WORKER: "0"
+      SEG_INCONCLUSIVE_RETRY: "0"
+      SEG_CORRELATION_STORE: "1"
+      SEG_SERVE_SPA: "1"
+    volumes:
+      - segs-data:/opt/segs/data
+      - segs-spool:/opt/segs/email/spool
+      - ./web-console/dist:/opt/segs/web-console/dist:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gmail-poll:
+    <<: *worker
+    environment:
+      SEG_WORKER: gmail_poll
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+    command: ["gmail_poll"]
+
+  static:
+    <<: *worker
+    environment:
+      SEG_WORKER: static
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+      SEG_STATIC_WORKERS: "2"
+    command: ["static"]
+
+  content-ai:
+    <<: *worker
+    environment:
+      SEG_WORKER: content_ai
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+      SEG_CONTENT_AI_WORKERS: "4"
+    command: ["content_ai"]
+
+  thread-ai:
+    <<: *worker
+    environment:
+      SEG_WORKER: thread_ai
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+    command: ["thread_ai"]
+
+  retry:
+    <<: *worker
+    environment:
+      SEG_WORKER: retry
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+      SEG_INCONCLUSIVE_RETRY: "1"
+    command: ["retry"]
+
+  campaign:
+    <<: *worker
+    environment:
+      SEG_WORKER: campaign
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+      SEG_CAMPAIGN_WORKER: "1"
+    command: ["campaign"]
+
+  sender:
+    <<: *worker
+    environment:
+      SEG_WORKER: sender
+      SEG_DATABASE_URL: postgresql://segs:segs@postgres:5432/segs
+      SEG_QUARANTINE_ROOT: /opt/segs/email/spool
+      SEG_PROFILE_WORKER: "1"
+      SEG_SENDER_RISK_WORKER: "1"
+    command: ["sender"]
+
+volumes:
+  segs-data:
+  segs-spool:
+  segs-pg:

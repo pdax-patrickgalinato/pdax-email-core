@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdax-email-core"
+version = "0.1.0"
+description = "SEGS — PDAX Secure Email Gateway Suite analysis core and dashboard"
+requires-python = ">=3.9"
+readme = "README.md"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "PyYAML>=6.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "python-multipart>=0.0.9",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.0",
+    "boto3>=1.34",
+    "psycopg[binary]>=3.1",
+    "openai",
+    "webauthn>=2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+]
+
+# ./backend is the Python package `backend`. Tests live under it but
+# are not an installable package.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "workers*", "cli"]
+exclude = ["backend.tests*"]
+
+[tool.setuptools.package-data]
+backend = ["schema.sql", "policy/**/*.yaml", "policy/**/*.txt"]
+
+[project.scripts]
+segs-analyze = "cli.analyze:main"
+segs-flag-descriptions = "cli.build_flag_descriptions:main"
+segs-openapi = "backend.api.openapi:main"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers --import-mode=importlib"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+src = ["backend", "workers", "cli"]
+
+[tool.ruff.lint]
+# Catch real bugs without a style rewrite of the existing tree.
+select = ["E9", "F63", "F7", "F82"]
